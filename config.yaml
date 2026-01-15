@@ -1,0 +1,63 @@
+# ================================================================
+# Discord AI Agent Bot 設定ファイル
+# ================================================================
+# 設定値（公開してよい情報）を記述してください
+# シークレット（APIキー、トークン）は .env ファイルで設定してください
+
+bot:
+  # メンションのみで反応するかどうか
+  mention_only: false
+  # 複数のボットを起動する場合は、異なるIDを指定
+  bot_id: default
+
+session:
+  # セッションの有効期限（分）
+  ttl_minutes: 30
+  # 期限切れセッションのクリーンアップ間隔（秒）
+  cleanup_interval: 300
+  # 各セッションの最大メッセージ履歴数
+  max_history_length: 50
+
+security:
+  # ファイルアップロードの最大サイズ（MB）
+  max_file_size: 1
+  # 危険なコマンドのブラックリスト
+  dangerous_commands:
+    - rm -rf /
+    - rm -rf .*
+    - mkfs
+    - dd if=
+    - "> /dev/sda"
+    - ":(){ :|:& };:"
+    - curl | sh
+    - wget | bash
+
+rate_limit:
+  # 1分あたりのリクエスト制限
+  requests_per_minute: 10
+  # 1時間あたりのリクエスト制限
+  requests_per_hour: 100
+
+anthropic:
+  # Anthropic APIのベースURL
+  # Anthropic公式: https://api.anthropic.com
+  # Z.AI: https://api.z.ai/api/anthropic
+  base_url: https://api.z.ai/api/anthropic
+  # 使用するモデル
+  # Anthropic: claude-3-5-sonnet-20241022, claude-sonnet-4-20250514
+  # Z.AI: GLM-4.7
+  model: GLM-4.7
+  # 最大トークン数
+  max_tokens: 8192
+  # エージェントループの最大反復回数
+  max_iterations: 15
+  # コマンド実行のタイムアウト（秒）
+  command_timeout: 30
+
+logging:
+  # ログレベル: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: INFO
+  # ログファイルパス
+  file: discord_ai_agent.log
+  # コンソールにも出力するか
+  console: true

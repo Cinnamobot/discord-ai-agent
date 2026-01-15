@@ -1,0 +1,20 @@
+[Unit]
+Description=Discord AI Agent Bot (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=discord-bot
+Group=discord-bot
+WorkingDirectory=/opt/discord-ai-bot
+Environment="PATH=/opt/discord-ai-bot/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/discord-ai-bot/.env
+ExecStart=/opt/discord-ai-bot/venv/bin/python main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

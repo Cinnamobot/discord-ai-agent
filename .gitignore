@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment Variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project Specific
+sessions/
+uploads/
+temp/
+
+# Agent Workspaces (keep structure, ignore content)
+agents/*/workspace/*
+!agents/*/workspace/.gitkeep
+!agents/*/workspace/README.md
+!agents/*/workspace/**/README.md
+!agents/*/workspace/analysis/TEMPLATE.md
+
+# Market Analyst specific
+agents/market-analyst/workspace/news/*.txt
+agents/market-analyst/workspace/news/*.md
+agents/market-analyst/workspace/analysis/*.md
+!agents/market-analyst/workspace/analysis/TEMPLATE.md
+agents/market-analyst/workspace/data/*
+
+# Old v2.0 files (if any remain)
+bot.py
+main.py
+src/agent_factory.py
+src/config.py
+src/security.py
+src/tool_hooks.py

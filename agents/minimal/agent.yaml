@@ -1,0 +1,13 @@
+name: "Minimal Agent"
+
+system_prompt: |
+  You are a helpful AI assistant.
+  
+  Use available tools when needed to help users.
+
+# 最小限のコマンド制限
+allowed_commands:
+  - ls
+  - cat
+  - python
+  - git
