@@ -385,10 +385,18 @@ class DiscordAIBot(commands.Bot):
                 prompt=user_message,
                 options=ClaudeAgentOptions(
                     system_prompt=self.agent_config.system_prompt,
-                    allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+                    allowed_tools=[
+                        "Read",
+                        "Write",
+                        "Edit",
+                        "Bash",
+                        "Glob",
+                        "Grep",
+                        "WebSearch",
+                    ],
                     cwd=str(self.agent_config.workspace),
                     cli_path=str(self.claude_cli_path),
-                    permission_mode="acceptEdits",  # Changed from bypassPermissions for production safety
+                    permission_mode="bypassPermissions",  # Auto-approve all tools including WebSearch
                     max_turns=15,
                     env=self.env_vars,
                     resume=sdk_session_id,  # Session continuity support
