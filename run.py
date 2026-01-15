@@ -21,7 +21,7 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 # Discord Botをインポートして実行
-from src.discord_bot import main
+from discord_ai_agent.discord_bot import main
 
 if __name__ == "__main__":
     # デフォルトエージェントを使用

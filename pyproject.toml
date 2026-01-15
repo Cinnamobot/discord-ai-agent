@@ -42,10 +42,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/discord-ai-agent"
-Documentation = "https://github.com/yourusername/discord-ai-agent/blob/main/README.md"
-Repository = "https://github.com/yourusername/discord-ai-agent"
-Issues = "https://github.com/yourusername/discord-ai-agent/issues"
+Homepage = "https://github.com/cinnamobot/discord-ai-agent"
+Documentation = "https://github.com/cinnamobot/discord-ai-agent/blob/main/README.md"
+Repository = "https://github.com/cinnamobot/discord-ai-agent"
+Issues = "https://github.com/cinnamobot/discord-ai-agent/issues"
 
 [project.scripts]
 discord-ai-agent = "discord_ai_agent.cli:main"

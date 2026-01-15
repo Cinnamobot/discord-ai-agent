@@ -23,8 +23,8 @@ Discord上で動作する高機能AIエージェントボットです。**Claude
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/your-username/discord-AI-agent.git
-cd discord-AI-agent
+git clone https://github.com/cinnamobot/discord-ai-agent.git
+cd discord-ai-agent
 
 # 依存関係をインストール
 uv sync
@@ -310,4 +310,4 @@ MIT License
 
 ---
 
-**Version**: 3.0.3 | **Author**: Your Name | **License**: MIT
+**Version**: 3.0.3 | **Author**: Discord AI Agent Team | **License**: MIT
