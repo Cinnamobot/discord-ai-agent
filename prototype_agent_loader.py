@@ -7,6 +7,7 @@ Agent SDK の ClaudeAgentOptions に適用できる形式に変換します。
 
 import sys
 import io
+import os
 import yaml
 from pathlib import Path
 from dataclasses import dataclass
@@ -72,8 +73,27 @@ def load_agent_config(agent_path: Path) -> AgentConfig:
         )
 
     # workspace ディレクトリ
-    workspace = agent_path / "workspace"
-    workspace.mkdir(exist_ok=True)
+    # 優先順位:
+    # 1. agent.yaml の workspace フィールド（絶対パス）
+    # 2. 環境変数 AGENT_WORKSPACE_ROOT
+    # 3. デフォルト（エージェントディレクトリ内）
+    workspace_config = agent_yaml.get("workspace")
+
+    if workspace_config:
+        # agent.yamlで指定されている場合
+        workspace = Path(workspace_config)
+        if not workspace.is_absolute():
+            # 相対パスの場合はエージェントルートからの相対パス
+            workspace = agent_path / workspace_config
+    else:
+        # 環境変数 AGENT_WORKSPACE_ROOT が設定されている場合はそちらを使用
+        workspace_root = os.getenv("AGENT_WORKSPACE_ROOT")
+        if workspace_root:
+            workspace = Path(workspace_root) / name / "workspace"
+        else:
+            workspace = agent_path / "workspace"
+
+    workspace.mkdir(parents=True, exist_ok=True)
 
     return AgentConfig(
         name=name,
@@ -84,7 +104,7 @@ def load_agent_config(agent_path: Path) -> AgentConfig:
     )
 
 
-def agent_config_to_sdk_options(config: AgentConfig, **kwargs):
+def agent_config_to_sdk_options(config: AgentConfig, **kwargs) -> dict:
     """
     AgentConfig を Agent SDK の ClaudeAgentOptions に変換
 

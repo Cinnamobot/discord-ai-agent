@@ -13,9 +13,11 @@ from dotenv import load_dotenv
 
 # 標準出力のバッファリングを無効化（リアルタイム表示のため）
 os.environ["PYTHONUNBUFFERED"] = "1"
-sys.stdout.reconfigure(line_buffering=True) if hasattr(
-    sys.stdout, "reconfigure"
-) else None
+# Windows用UTF-8エンコーディング設定（emoji・カラー対応）
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True, encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 # プロジェクトルートをパスに追加
 project_root = Path(__file__).parent
@@ -49,58 +51,102 @@ class Colors:
 
 def log_agent_message(message):
     """Agent SDKのメッセージを表示"""
+    # デバッグ: メッセージタイプを表示
+    msg_type = type(message).__name__
 
-    # TextMessage - Claude の思考・推論
-    if hasattr(message, "text") and message.text and hasattr(message, "type"):
-        if message.type == "text":
-            text_preview = message.text[:200]
-            if len(message.text) > 200:
+    # SystemMessage - システムメッセージ（スキップ）
+    if msg_type == "SystemMessage":
+        return
+
+    # AssistantMessage - アシスタントの応答（思考・ツール使用を含む）
+    if msg_type == "AssistantMessage" and hasattr(message, "content"):
+        content = message.content
+        if not content:
+            return
+
+        # content は TextBlock/ToolUseBlock のリスト
+        if isinstance(content, list):
+            for item in content:
+                # TextBlock - テキスト（思考）
+                if type(item).__name__ == "TextBlock":
+                    text = getattr(item, "text", "")
+                    if text:
+                        text_preview = text[:200]
+                        if len(text) > 200:
+                            text_preview += "..."
+                        print(f"{Colors.CYAN}💭 Claude Thinking:{Colors.ENDC}", flush=True)
+                        print(f"   {text_preview}", flush=True)
+
+                # ToolUseBlock - ツール使用
+                elif type(item).__name__ == "ToolUseBlock":
+                    tool_name = getattr(item, "name", "unknown")
+                    tool_input = getattr(item, "input", {})
+                    print(
+                        f"\n{Colors.YELLOW}🔧 Tool Use:{Colors.ENDC} {Colors.BOLD}{tool_name}{Colors.ENDC}",
+                        flush=True,
+                    )
+                    if isinstance(tool_input, dict):
+                        for key, value in tool_input.items():
+                            value_str = str(value)
+                            if len(value_str) > 100:
+                                value_str = value_str[:100] + "..."
+                            print(
+                                f"   {Colors.BLUE}└─{Colors.ENDC} {key}: {value_str}",
+                                flush=True,
+                            )
+                    else:
+                        input_str = str(tool_input)[:200]
+                        print(f"   {Colors.BLUE}└─{Colors.ENDC} input: {input_str}", flush=True)
+
+        # content が文字列の場合
+        elif isinstance(content, str):
+            text_preview = content[:200]
+            if len(content) > 200:
                 text_preview += "..."
             print(f"{Colors.CYAN}💭 Claude Thinking:{Colors.ENDC}", flush=True)
             print(f"   {text_preview}", flush=True)
 
-    # ToolUseMessage - ツール使用開始
-    if hasattr(message, "tool_name"):
-        print(
-            f"\n{Colors.YELLOW}🔧 Tool Use:{Colors.ENDC} {Colors.BOLD}{message.tool_name}{Colors.ENDC}",
-            flush=True,
-        )
-        if hasattr(message, "tool_input"):
-            tool_input = message.tool_input
-            if isinstance(tool_input, dict):
-                for key, value in tool_input.items():
-                    value_str = str(value)
-                    if len(value_str) > 100:
-                        value_str = value_str[:100] + "..."
-                    print(
-                        f"   {Colors.BLUE}└─{Colors.ENDC} {key}: {value_str}",
-                        flush=True,
-                    )
-            else:
-                input_str = str(tool_input)[:200]
-                print(f"   {Colors.BLUE}└─{Colors.ENDC} input: {input_str}", flush=True)
+    # UserMessage - ツール実行結果が含まれる場合がある
+    if msg_type == "UserMessage" and hasattr(message, "content"):
+        content = message.content
+        if not content:
+            return
 
-    # ToolResultMessage - ツール実行結果
-    if hasattr(message, "tool_result") and message.tool_result is not None:
-        tool_result = message.tool_result
-        result_str = str(tool_result)
+        # content は ToolResultBlock のリスト
+        if isinstance(content, list):
+            for item in content:
+                # ToolResultBlock - ツール実行結果
+                if type(item).__name__ == "ToolResultBlock":
+                    tool_result = getattr(item, "content", "")
+                    is_error = getattr(item, "is_error", False)
+                    result_str = str(tool_result)
 
-        if len(result_str) > 500:
-            lines = result_str.split("\n")
-            preview = "\n".join(lines[:5])
-            print(
-                f"{Colors.GREEN}✓ Tool Result:{Colors.ENDC} ({len(result_str)} chars, {len(lines)} lines)",
-                flush=True,
-            )
-            print(f"   {preview}", flush=True)
-            if len(lines) > 5:
-                print(
-                    f"   {Colors.BLUE}... ({len(lines) - 5} more lines){Colors.ENDC}",
-                    flush=True,
-                )
-        else:
-            print(f"{Colors.GREEN}✓ Tool Result:{Colors.ENDC}", flush=True)
-            print(f"   {result_str}", flush=True)
+                    # 結果の長さに応じて表示方法を変える
+                    if len(result_str) > 500:
+                        lines = result_str.split("\n")
+                        preview = "\n".join(lines[:5])
+                        if is_error:
+                            print(
+                                f"{Colors.RED}✗ Tool Error:{Colors.ENDC} ({len(result_str)} chars, {len(lines)} lines)",
+                                flush=True,
+                            )
+                        else:
+                            print(
+                                f"{Colors.GREEN}✓ Tool Result:{Colors.ENDC} ({len(result_str)} chars, {len(lines)} lines)",
+                                flush=True,
+                            )
+                        print(f"   {preview}", flush=True)
+                        if len(lines) > 5:
+                            print(
+                                f"   {Colors.BLUE}... ({len(lines) - 5} more lines){Colors.ENDC}",
+                                flush=True,
+                            )
+                    else:
+                        if is_error:
+                            print(f"{Colors.RED}✗ Tool Error:{Colors.ENDC}", flush=True)
+                        else:
+                            print(f"{Colors.GREEN}✓ Tool Result:{Colors.ENDC}", flush=True)
+                        print(f"   {result_str}", flush=True)
 
     # ResultMessage - 最終応答
     if hasattr(message, "result") and message.result:

@@ -10,9 +10,11 @@ from pathlib import Path
 
 # 標準出力のバッファリングを無効化（リアルタイム表示のため）
 os.environ["PYTHONUNBUFFERED"] = "1"
-sys.stdout.reconfigure(line_buffering=True) if hasattr(
-    sys.stdout, "reconfigure"
-) else None
+# Windows用UTF-8エンコーディング設定（emoji・カラー対応）
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True, encoding="utf-8")
+elif hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 # プロジェクトルートをパスに追加
 project_root = Path(__file__).parent

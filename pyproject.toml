@@ -1,15 +1,62 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "discord-ai-agent"
-version = "3.0.0"
-description = "Discord AI Agent Bot powered by Claude Agent SDK"
+version = "3.0.3"
+description = "Framework for creating AI-powered Discord bots with Claude Agent SDK"
 readme = "README.md"
 requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Discord AI Agent Team"},
+]
+keywords = ["discord", "bot", "ai", "claude", "agent", "chatbot", "assistant"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Chat",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
 dependencies = [
     "claude-agent-sdk>=0.1.19",
     "discord-py>=2.6.4",
     "python-dotenv>=1.2.1",
     "pyyaml>=6.0.3",
+    "aiohttp>=3.9.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "black>=24.0.0",
+    "ruff>=0.5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/discord-ai-agent"
+Documentation = "https://github.com/yourusername/discord-ai-agent/blob/main/README.md"
+Repository = "https://github.com/yourusername/discord-ai-agent"
+Issues = "https://github.com/yourusername/discord-ai-agent/issues"
+
+[project.scripts]
+discord-ai-agent = "discord_ai_agent.cli:main"
+discord-ai-bot = "discord_ai_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.setuptools.package-data]
+discord_ai_agent = ["py.typed"]
 
 [dependency-groups]
 dev = [

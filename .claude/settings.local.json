@@ -5,7 +5,8 @@
       "mcp__acp__Bash",
       "mcp__acp__Write",
       "mcp__web-search-prime__webSearchPrime",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(uv run python:*)"
     ]
   }
 }

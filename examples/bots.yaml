@@ -1,0 +1,40 @@
+# Discord AI Agent - Multiple Bots Configuration
+# 
+# This file defines multiple bot instances to run simultaneously.
+# Each bot can use a different agent profile and Discord bot token.
+
+# Environment file to load (optional)
+env_file: .env
+
+# Bot configurations
+bots:
+  # Bot 1: Market Analyst
+  - name: "Market Analyst Bot"
+    agent: ./agents/market-analyst
+    token_env: DISCORD_BOT_TOKEN_MARKET  # Environment variable name
+    enabled: true
+  
+  # Bot 2: General Assistant
+  - name: "General Assistant Bot"
+    agent: ./agents/general-assistant
+    token_env: DISCORD_BOT_TOKEN_GENERAL
+    enabled: true
+  
+  # Bot 3: Code Helper (disabled)
+  - name: "Code Helper Bot"
+    agent: ./agents/code-helper
+    token_env: DISCORD_BOT_TOKEN_CODE
+    enabled: false  # This bot won't start
+  
+  # Bot 4: Python Tutor
+  - name: "Python Tutor Bot"
+    agent: ./agents/python-tutor
+    token_env: $DISCORD_BOT_TOKEN_PYTHON  # $ prefix means env var
+    enabled: true
+
+# Notes:
+# - token_env: Name of environment variable containing the Discord bot token
+# - Use $ prefix for environment variables: $VAR_NAME
+# - Or use just the variable name: VAR_NAME (will try both direct value and env var)
+# - enabled: Set to false to disable a bot without removing its configuration
+# - All bots run in parallel using asyncio

@@ -2,8 +2,9 @@
 
 import aiohttp
 import asyncio
+import discord
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Dict, Any
 import logging
 
 
@@ -11,11 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 async def download_attachments(
-    attachments: List,
+    attachments: List[discord.Attachment],
     workspace: Path,
     max_file_size: int = 10 * 1024 * 1024,  # 10MB
     timeout: int = 30,
-) -> List[dict]:
+) -> List[Dict[str, Any]]:
     """
     Discordの添付ファイルをワークスペースにダウンロード
 
@@ -64,13 +65,15 @@ async def download_attachments(
     formatted_results = []
     for result in results:
         if isinstance(result, Exception):
-            formatted_results.append({
-                "success": False,
-                "filename": "",
-                "path": "",
-                "size": 0,
-                "error": str(result),
-            })
+            formatted_results.append(
+                {
+                    "success": False,
+                    "filename": "",
+                    "path": "",
+                    "size": 0,
+                    "error": str(result),
+                }
+            )
         else:
             formatted_results.append(result)
 
@@ -79,11 +82,11 @@ async def download_attachments(
 
 async def _download_attachment(
     session: aiohttp.ClientSession,
-    attachment,
+    attachment: discord.Attachment,
     workspace: Path,
     max_file_size: int,
     timeout: int,
-) -> dict:
+) -> Dict[str, Any]:
     """
     個々の添付ファイルをダウンロード
 
@@ -116,7 +119,9 @@ async def _download_attachment(
 
     try:
         # ファイルをダウンロード
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+        async with session.get(
+            url, timeout=aiohttp.ClientTimeout(total=timeout)
+        ) as response:
             if response.status != 200:
                 return {
                     "success": False,
@@ -170,7 +175,7 @@ async def _download_attachment(
             "size": file_size,
             "error": f"Download timeout after {timeout} seconds",
         }
-    except Exception as e:
+    except (OSError, aiohttp.ClientError, discord.HTTPException) as e:
         logger.error(f"Error downloading attachment {filename}: {e}")
         return {
             "success": False,

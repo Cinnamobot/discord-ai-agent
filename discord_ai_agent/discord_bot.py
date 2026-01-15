@@ -8,13 +8,19 @@ import asyncio
 import logging
 import os
 import sys
+import yaml
 from pathlib import Path
 from typing import Optional
 
+import aiohttp
+
 # 標準出力のバッファリングを無効化（リアルタイム表示のため）
+# Windows用UTF-8エンコーディング設定（emoji・カラー対応）
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(line_buffering=True)
-elif hasattr(sys.stdout, "flush"):
+    sys.stdout.reconfigure(line_buffering=True, encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "flush"):
     # Python 3.6以前の互換性
     import functools
 
@@ -32,12 +38,12 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # 既存モジュール（セッション管理、レート制限など）
-from src.session_adapter import DiscordSessionManager
-from src.rate_limit import RateLimiter
-from src import file_manager
+from discord_ai_agent.session_adapter import DiscordSessionManager
+from discord_ai_agent.rate_limit import RateLimiter
+from discord_ai_agent import file_manager
 
 # エージェント設定ローダー
-from prototype_agent_loader import load_agent_config, AgentConfig
+from discord_ai_agent.agent_loader import load_agent_config, AgentConfig
 
 # ロギング設定（カラー出力対応）
 logging.basicConfig(
@@ -66,19 +72,21 @@ class Colors:
 class DiscordAIBot(commands.Bot):
     """Discord AI Agent Bot - Agent SDK Integration"""
 
-    def __init__(self, agent_path: Path):
+    def __init__(self, agent_config_or_path, intents: Optional[discord.Intents] = None):
         """
-        初期化
+        Initialize Discord AI Bot
 
         Args:
-            agent_path: エージェントディレクトリのパス
+            agent_config_or_path: AgentConfig object or path to agent directory
+            intents: Discord intents (optional, uses defaults if not provided)
         """
-        # Discord intents（すべて有効化してテスト）
-        intents = discord.Intents.default()
-        intents.message_content = True
-        intents.messages = True
-        intents.guilds = True
-        intents.members = True  # メンション検出に必要な場合がある
+        # Setup intents
+        if intents is None:
+            intents = discord.Intents.default()
+            intents.message_content = True
+            intents.messages = True
+            intents.guilds = True
+            intents.members = True
 
         super().__init__(
             command_prefix="!",
@@ -86,15 +94,18 @@ class DiscordAIBot(commands.Bot):
             help_command=None,
         )
 
-        self.agent_path = agent_path
-
-        # エージェント設定を読み込み
-        try:
-            self.agent_config: AgentConfig = load_agent_config(agent_path)
-            logger.info(f"エージェント設定読み込み成功: {self.agent_config.name}")
-        except Exception as e:
-            logger.error(f"エージェント設定の読み込みに失敗: {e}")
-            raise
+        # Load agent config
+        if isinstance(agent_config_or_path, AgentConfig):
+            self.agent_config = agent_config_or_path
+            self.agent_path = agent_config_or_path.agent_root
+        else:
+            self.agent_path = Path(agent_config_or_path)
+            try:
+                self.agent_config: AgentConfig = load_agent_config(self.agent_path)
+                logger.info(f"エージェント設定読み込み成功: {self.agent_config.name}")
+            except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
+                logger.error(f"エージェント設定の読み込みに失敗: {e}")
+                raise
 
         # セッション管理
         self.session_manager = DiscordSessionManager(
@@ -191,7 +202,7 @@ class DiscordAIBot(commands.Bot):
                     max_file_size=1024 * 1024,  # 1MB
                 )
                 content += f"\n\n（{len(message.attachments)}個のファイルをworkspace/に保存しました）"
-            except Exception as e:
+            except (OSError, aiohttp.ClientError) as e:
                 logger.error(f"ファイルダウンロードエラー: {e}")
                 await message.reply(f"⚠️ ファイルのダウンロードに失敗しました: {e}")
                 return
@@ -236,7 +247,12 @@ class DiscordAIBot(commands.Bot):
                     f"bot_message_id={bot_message.id}"
                 )
 
-        except Exception as e:
+        except (
+            discord.HTTPException,
+            discord.Forbidden,
+            asyncio.TimeoutError,
+            RuntimeError,
+        ) as e:
             logger.error(f"エージェント実行エラー: {e}", exc_info=True)
             await message.reply(
                 f"❌ エラーが発生しました: {str(e)}\n詳細はログを確認してください。"
@@ -302,7 +318,7 @@ class DiscordAIBot(commands.Bot):
                     max_file_size=1024 * 1024,  # 1MB
                 )
                 content += f"\n\n（{len(message.attachments)}個のファイルをworkspace/に保存しました）"
-            except Exception as e:
+            except (OSError, aiohttp.ClientError) as e:
                 logger.error(f"ファイルダウンロードエラー: {e}")
                 await message.reply(f"⚠️ ファイルのダウンロードに失敗しました: {e}")
                 return
@@ -343,7 +359,12 @@ class DiscordAIBot(commands.Bot):
                     f"メッセージ数={len(session.messages)}"
                 )
 
-        except Exception as e:
+        except (
+            discord.HTTPException,
+            discord.Forbidden,
+            asyncio.TimeoutError,
+            RuntimeError,
+        ) as e:
             logger.error(f"エージェント実行エラー: {e}", exc_info=True)
             await message.reply(
                 f"❌ エラーが発生しました: {str(e)}\n詳細はログを確認してください。"
@@ -413,7 +434,7 @@ class DiscordAIBot(commands.Bot):
                     new_session_id = message.session_id
                     logger.debug(f"Agent SDK session_id: {new_session_id}")
 
-        except Exception as e:
+        except (RuntimeError, OSError, ValueError) as e:
             logger.error(f"❌ Agent SDK実行エラー: {e}", exc_info=True)
             raise
 
@@ -440,67 +461,114 @@ class DiscordAIBot(commands.Bot):
             message: Agent SDKから返されるメッセージオブジェクト
         """
         # デバッグ: メッセージタイプをログ出力（開発時のみ）
-        logger.debug(
-            f"Message type: {type(message).__name__}, attrs: {[a for a in dir(message) if not a.startswith('_')]}"
-        )
+        msg_type = type(message).__name__
+        logger.debug(f"Message type: {msg_type}")
 
-        # TextMessage - Claude の思考・推論
-        if hasattr(message, "text") and message.text and hasattr(message, "type"):
-            if message.type == "text":
-                text_preview = message.text[:200]
-                if len(message.text) > 200:
+        # SystemMessage - システムメッセージ（スキップ）
+        if msg_type == "SystemMessage":
+            return
+
+        # AssistantMessage - アシスタントの応答（思考・ツール使用を含む）
+        if msg_type == "AssistantMessage" and hasattr(message, "content"):
+            content = message.content
+            if not content:
+                return
+
+            # content は TextBlock/ToolUseBlock のリスト
+            if isinstance(content, list):
+                for item in content:
+                    # TextBlock - テキスト（思考）
+                    if type(item).__name__ == "TextBlock":
+                        text = getattr(item, "text", "")
+                        if text:
+                            text_preview = text[:200]
+                            if len(text) > 200:
+                                text_preview += "..."
+                            print(
+                                f"{Colors.CYAN}💭 Claude Thinking:{Colors.ENDC}",
+                                flush=True,
+                            )
+                            print(f"   {text_preview}", flush=True)
+
+                    # ToolUseBlock - ツール使用
+                    elif type(item).__name__ == "ToolUseBlock":
+                        tool_name = getattr(item, "name", "unknown")
+                        tool_input = getattr(item, "input", {})
+                        print(
+                            f"\n{Colors.YELLOW}🔧 Tool Use:{Colors.ENDC} {Colors.BOLD}{tool_name}{Colors.ENDC}",
+                            flush=True,
+                        )
+                        if isinstance(tool_input, dict):
+                            for key, value in tool_input.items():
+                                value_str = str(value)
+                                if len(value_str) > 100:
+                                    value_str = value_str[:100] + "..."
+                                print(
+                                    f"   {Colors.BLUE}└─{Colors.ENDC} {key}: {value_str}",
+                                    flush=True,
+                                )
+                        else:
+                            input_str = str(tool_input)[:200]
+                            print(
+                                f"   {Colors.BLUE}└─{Colors.ENDC} input: {input_str}",
+                                flush=True,
+                            )
+
+            # content が文字列の場合
+            elif isinstance(content, str):
+                text_preview = content[:200]
+                if len(content) > 200:
                     text_preview += "..."
                 print(f"{Colors.CYAN}💭 Claude Thinking:{Colors.ENDC}", flush=True)
                 print(f"   {text_preview}", flush=True)
 
-        # ToolUseMessage - ツール使用開始
-        if hasattr(message, "tool_name"):
-            print(
-                f"\n{Colors.YELLOW}🔧 Tool Use:{Colors.ENDC} {Colors.BOLD}{message.tool_name}{Colors.ENDC}",
-                flush=True,
-            )
-            if hasattr(message, "tool_input"):
-                # ツール入力を整形して表示
-                tool_input = message.tool_input
-                if isinstance(tool_input, dict):
-                    for key, value in tool_input.items():
-                        # 長い値は省略
-                        value_str = str(value)
-                        if len(value_str) > 100:
-                            value_str = value_str[:100] + "..."
-                        print(
-                            f"   {Colors.BLUE}└─{Colors.ENDC} {key}: {value_str}",
-                            flush=True,
-                        )
-                else:
-                    input_str = str(tool_input)[:200]
-                    print(
-                        f"   {Colors.BLUE}└─{Colors.ENDC} input: {input_str}",
-                        flush=True,
-                    )
+        # UserMessage - ツール実行結果が含まれる場合がある
+        if msg_type == "UserMessage" and hasattr(message, "content"):
+            content = message.content
+            if not content:
+                return
 
-        # ToolResultMessage - ツール実行結果
-        if hasattr(message, "tool_result") and message.tool_result is not None:
-            tool_result = message.tool_result
-            result_str = str(tool_result)
+            # content は ToolResultBlock のリスト
+            if isinstance(content, list):
+                for item in content:
+                    # ToolResultBlock - ツール実行結果
+                    if type(item).__name__ == "ToolResultBlock":
+                        tool_result = getattr(item, "content", "")
+                        is_error = getattr(item, "is_error", False)
+                        result_str = str(tool_result)
 
-            # 結果の長さに応じて表示方法を変える
-            if len(result_str) > 500:
-                lines = result_str.split("\n")
-                preview = "\n".join(lines[:5])
-                print(
-                    f"{Colors.GREEN}✓ Tool Result:{Colors.ENDC} ({len(result_str)} chars, {len(lines)} lines)",
-                    flush=True,
-                )
-                print(f"   {preview}", flush=True)
-                if len(lines) > 5:
-                    print(
-                        f"   {Colors.BLUE}... ({len(lines) - 5} more lines){Colors.ENDC}",
-                        flush=True,
-                    )
-            else:
-                print(f"{Colors.GREEN}✓ Tool Result:{Colors.ENDC}", flush=True)
-                print(f"   {result_str}", flush=True)
+                        # 結果の長さに応じて表示方法を変える
+                        if len(result_str) > 500:
+                            lines = result_str.split("\n")
+                            preview = "\n".join(lines[:5])
+                            if is_error:
+                                print(
+                                    f"{Colors.RED}✗ Tool Error:{Colors.ENDC} ({len(result_str)} chars, {len(lines)} lines)",
+                                    flush=True,
+                                )
+                            else:
+                                print(
+                                    f"{Colors.GREEN}✓ Tool Result:{Colors.ENDC} ({len(result_str)} chars, {len(lines)} lines)",
+                                    flush=True,
+                                )
+                            print(f"   {preview}", flush=True)
+                            if len(lines) > 5:
+                                print(
+                                    f"   {Colors.BLUE}... ({len(lines) - 5} more lines){Colors.ENDC}",
+                                    flush=True,
+                                )
+                        else:
+                            if is_error:
+                                print(
+                                    f"{Colors.RED}✗ Tool Error:{Colors.ENDC}",
+                                    flush=True,
+                                )
+                            else:
+                                print(
+                                    f"{Colors.GREEN}✓ Tool Result:{Colors.ENDC}",
+                                    flush=True,
+                                )
+                            print(f"   {result_str}", flush=True)
 
         # ResultMessage - 最終応答
         if hasattr(message, "result") and message.result:
@@ -530,8 +598,8 @@ class DiscordAIBot(commands.Bot):
         Returns:
             送信したメッセージ（最初の1つ）
         """
-        # Discord の文字数制限は2000文字
-        MAX_LENGTH = 2000
+        # Discord の文字数制限は2000文字（「続き」などを考慮して少し余裕を持つ）
+        MAX_LENGTH = 1950
 
         if len(response) <= MAX_LENGTH:
             return await message.reply(response)
@@ -541,7 +609,17 @@ class DiscordAIBot(commands.Bot):
         current_part = ""
 
         for line in response.split("\n"):
-            if len(current_part) + len(line) + 1 > MAX_LENGTH:
+            # 1行がMAX_LENGTHを超える場合は強制的に分割
+            if len(line) > MAX_LENGTH:
+                # 現在のパートを保存
+                if current_part:
+                    parts.append(current_part)
+                    current_part = ""
+                # 長い行を分割
+                for i in range(0, len(line), MAX_LENGTH):
+                    chunk = line[i : i + MAX_LENGTH]
+                    parts.append(chunk)
+            elif len(current_part) + len(line) + 1 > MAX_LENGTH:
                 parts.append(current_part)
                 current_part = line
             else:
@@ -557,6 +635,9 @@ class DiscordAIBot(commands.Bot):
         first_message = await message.reply(parts[0])
 
         for part in parts[1:]:
+            # 「続き」を追加しても2000文字を超えないようにする
+            if len(part) > 1950:
+                part = part[:1950] + "..."
             await message.channel.send(f"（続き）\n{part}")
 
         return first_message
@@ -596,7 +677,7 @@ def main():
         bot.run(bot_token)
     except KeyboardInterrupt:
         logger.info("Bot停止（KeyboardInterrupt）")
-    except Exception as e:
+    except (discord.LoginFailure, discord.HTTPException, discord.GatewayNotFound) as e:
         logger.error(f"Bot実行エラー: {e}", exc_info=True)
         sys.exit(1)
 

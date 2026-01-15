@@ -9,8 +9,10 @@ User=discord-bot
 Group=discord-bot
 WorkingDirectory=/opt/discord-ai-bot
 Environment="PATH=/opt/discord-ai-bot/venv/bin:/usr/local/bin:/usr/bin:/bin"
+# ワークスペースのルートディレクトリを指定（オプション）
+# Environment="AGENT_WORKSPACE_ROOT=/data/agent-workspaces"
 EnvironmentFile=/opt/discord-ai-bot/.env
-ExecStart=/opt/discord-ai-bot/venv/bin/python main.py
+ExecStart=/opt/discord-ai-bot/venv/bin/python run.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
