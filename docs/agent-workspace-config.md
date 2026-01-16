@@ -95,8 +95,9 @@ system_prompt: |
 `/opt/discord-ai-bot/.env`:
 ```bash
 DISCORD_BOT_TOKEN=your_token_here
-ANTHROPIC_API_KEY=your_api_key_here
 AGENT_WORKSPACE_ROOT=/data/agent-workspaces
+
+# Note: Claude Code CLIを使用するため、Anthropic APIキーは不要です
 ```
 
 systemdファイルは変更不要。

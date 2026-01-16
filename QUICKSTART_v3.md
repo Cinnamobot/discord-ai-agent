@@ -11,8 +11,7 @@
 
 - Python 3.10+
 - Discord Bot Token
-- Z.AI API Key (Claude access)
-- Claude CLI installed
+- Claude Code CLI installed (no API key needed)
 
 ### Step 1: Clone and Install
 
@@ -28,9 +27,12 @@ Create `.env` file:
 
 ```bash
 DISCORD_BOT_TOKEN=your_discord_bot_token
-ANTHROPIC_API_KEY=your_z_ai_api_key
-ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic
+
+# Claude CLI パス（オプション: 指定しない場合は自動検知されます）
+# CLAUDE_CLI_PATH=/path/to/claude
 ```
+
+**Note**: このbotはClaude Code CLIを使用するため、Anthropic APIキーは不要です。Claude Code CLIが自動的に認証を処理します。
 
 ### Step 3: Test Agent SDK
 
@@ -297,8 +299,8 @@ INFO - セッション更新: bot_message_id=789, メッセージ数=4
 # Test Agent SDK directly
 uv run python test_agent_sdk_simple.py
 
-# Check Claude CLI
-C:\Users\szk27\.local\bin\claude.exe --version
+# Check Claude CLI (パスは自動検知されます)
+claude --version
 
 # Verify environment variables
 python -c "import os; from dotenv import load_dotenv; load_dotenv(); print(os.getenv('ANTHROPIC_BASE_URL'))"

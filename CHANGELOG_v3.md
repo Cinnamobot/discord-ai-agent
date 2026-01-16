@@ -393,23 +393,18 @@ config = load_agent_config(Path("./agents/default"))
 - Workspace path resolution
 - Multiple agent profiles
 
-### 2. Z.AI Backend Support
+### 2. Claude Code CLI Integration
+
+**Note:** このプロジェクトはClaude Code CLIを使用するため、Anthropic APIキーは不要です。
+Claude Code CLIが自動的に認証を処理します。
 
 **Configuration:**
 ```bash
 # .env
-ANTHROPIC_API_KEY=your_z_ai_key
-ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic
-```
+DISCORD_BOT_TOKEN=your_discord_bot_token
 
-**Passed to Agent SDK:**
-```python
-ClaudeAgentOptions(
-    env={
-        "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
-        "ANTHROPIC_BASE_URL": os.getenv("ANTHROPIC_BASE_URL"),
-    }
-)
+# Claude CLI パス（オプション: 自動検知されます）
+# CLAUDE_CLI_PATH=/path/to/claude
 ```
 
 ### 3. Enhanced Error Handling
@@ -566,8 +561,8 @@ discord-AI-agent/
 ```bash
 # .env
 DISCORD_BOT_TOKEN=your_discord_token
-ANTHROPIC_API_KEY=your_z_ai_api_key
-ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic
+
+# Note: Claude Code CLIを使用するため、Anthropic APIキーは不要です
 ```
 
 ### Agent Configuration
@@ -851,9 +846,10 @@ Report issues at: https://github.com/your-repo/discord-AI-agent/issues
 - Check: `intents.members = True` in discord_bot.py:56
 - Check: Bot has proper Discord permissions
 
-**Issue: "ANTHROPIC_API_KEY not set" error**
-- Check: `.env` file exists and has valid Z.AI key
-- Check: `ANTHROPIC_BASE_URL` set to Z.AI endpoint
+**Issue: Claude CLI not found**
+- Check: Claude Code CLI is installed
+- Check: `CLAUDE_CLI_PATH` environment variable (optional)
+- Check: Claude CLI is in PATH or auto-detected
 
 **Issue: Session not continuing on reply**
 - Check: Replying to bot's message (not user's)

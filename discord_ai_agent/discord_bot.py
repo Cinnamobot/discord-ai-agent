@@ -28,6 +28,8 @@ if hasattr(sys.stdout, "flush"):
 
 import discord
 from discord.ext import commands
+
+from .claude_cli_finder import find_claude_cli
 from dotenv import load_dotenv
 
 # Agent SDK
@@ -119,16 +121,19 @@ class DiscordAIBot(commands.Bot):
             per_hour=100,
         )
 
-        # Claude CLI パス
-        self.claude_cli_path = Path(r"C:\Users\szk27\.local\bin\claude.exe")
-        if not self.claude_cli_path.exists():
-            logger.warning(f"Claude CLI が見つかりません: {self.claude_cli_path}")
+        # Claude CLI パス（自動検知）
+        self.claude_cli_path = find_claude_cli()
+        if self.claude_cli_path is None:
+            logger.critical("Claude CLI が見つかりません。起動を中止します。")
+            raise FileNotFoundError(
+                "Claude CLI が見つかりません。環境変数 CLAUDE_CLI_PATH を設定するか、"
+                "Claude CLI を PATH に追加してください。"
+            )
+        logger.info(f"Claude CLI を使用: {self.claude_cli_path}")
 
         # 環境変数（Agent SDKに渡す）
-        self.env_vars = {
-            "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY", ""),
-            "ANTHROPIC_BASE_URL": os.getenv("ANTHROPIC_BASE_URL", ""),
-        }
+        # Note: Claude Code CLIを使用するため、Anthropic APIキーは不要
+        self.env_vars = {}
 
     async def on_ready(self):
         """Bot起動時の処理"""

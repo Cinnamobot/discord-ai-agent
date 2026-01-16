@@ -179,11 +179,10 @@ DISCORD_BOT_TOKEN_GENERAL=your_token_here
 # Bot 3のトークン
 DISCORD_BOT_TOKEN_CODE=your_token_here
 
-# Anthropic APIキー（全botで共有）
-ANTHROPIC_API_KEY=your_api_key_here
-
 # ワークスペースのルート（オプション）
 AGENT_WORKSPACE_ROOT=/data/agent-workspaces
+
+# Note: Claude Code CLIを使用するため、Anthropic APIキーは不要です
 ```
 
 ## systemdでの起動

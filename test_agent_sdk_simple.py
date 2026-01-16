@@ -12,6 +12,9 @@ from pathlib import Path
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
+# Claude CLI finder をインポート
+from discord_ai_agent.claude_cli_finder import find_claude_cli
+
 
 async def main():
     print("=" * 60)
@@ -20,25 +23,27 @@ async def main():
 
     # 環境変数確認
     print("\n📋 環境変数チェック:")
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    print(f"  ANTHROPIC_API_KEY: {'設定済み' if api_key else '未設定'}")
-    if api_key:
-        print(f"  キーの先頭: {api_key[:20]}...")
+    print("  Note: Claude Code CLIを使用するため、Anthropic APIキーは不要です")
 
     # .env から読み込み
     try:
         from dotenv import load_dotenv
 
         load_dotenv()
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        print(f"  .env読み込み後: {'設定済み' if api_key else '未設定'}")
+        print("  .env 読み込み完了")
     except ImportError:
         print("  ⚠️ dotenv がインストールされていません")
 
-    # Claude CLI パス確認
-    claude_cli = Path(r"C:\Users\szk27\.local\bin\claude.exe")
-    print(f"\n📍 Claude CLI パス:")
-    print(f"  {claude_cli}")
+    # Claude CLI パス確認（自動検知）
+    print(f"\n📍 Claude CLI パス検出:")
+    claude_cli = find_claude_cli()
+    if claude_cli is None:
+        print("  ❌ Claude CLI が見つかりませんでした")
+        print(
+            "  環境変数 CLAUDE_CLI_PATH を設定するか、Claude CLI を PATH に追加してください"
+        )
+        return
+    print(f"  ✅ {claude_cli}")
     print(f"  存在: {claude_cli.exists()}")
 
     # Agent SDK インポート
@@ -60,19 +65,13 @@ async def main():
         result_text = ""
         message_count = 0
 
-        # 環境変数を明示的に渡す
-        env_vars = {
-            "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY", ""),
-            "ANTHROPIC_BASE_URL": os.getenv("ANTHROPIC_BASE_URL", ""),
-        }
-
+        # Note: Claude Code CLIを使用するため、環境変数は不要
         async for message in query(
             prompt="Hi",
             options=ClaudeAgentOptions(
                 cli_path=str(claude_cli),
                 permission_mode="bypassPermissions",
                 max_turns=1,
-                env=env_vars,  # 環境変数を明示的に渡す
             ),
         ):
             message_count += 1

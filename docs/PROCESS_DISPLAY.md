@@ -53,7 +53,7 @@ Discord AI Agent Bot v3.0では、Agent SDKの実行プロセス（推論、ツ�
    I'll read the config.yaml file for you.
 
 🔧 Tool Use: Read
-   └─ filePath: C:\Users\szk27\work\discord-AI-agent\config.yaml
+   └─ filePath: /path/to/discord-AI-agent/config.yaml
 
 ✓ Tool Result: (2341 chars, 85 lines)
    agent:
@@ -101,7 +101,7 @@ Discord AI Agent Bot v3.0では、Agent SDKの実行プロセス（推論、ツ�
    Now I'll read the main bot file.
 
 🔧 Tool Use: Read
-   └─ filePath: C:\Users\szk27\work\discord-AI-agent\run.py
+   └─ filePath: /path/to/discord-AI-agent/run.py
 
 ✓ Tool Result: (421 chars, 23 lines)
    """Discord AI Agent Bot v3.0 起動スクリプト"""

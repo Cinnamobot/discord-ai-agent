@@ -74,7 +74,9 @@ def log_agent_message(message):
                         text_preview = text[:200]
                         if len(text) > 200:
                             text_preview += "..."
-                        print(f"{Colors.CYAN}💭 Claude Thinking:{Colors.ENDC}", flush=True)
+                        print(
+                            f"{Colors.CYAN}💭 Claude Thinking:{Colors.ENDC}", flush=True
+                        )
                         print(f"   {text_preview}", flush=True)
 
                 # ToolUseBlock - ツール使用
@@ -96,7 +98,10 @@ def log_agent_message(message):
                             )
                     else:
                         input_str = str(tool_input)[:200]
-                        print(f"   {Colors.BLUE}└─{Colors.ENDC} input: {input_str}", flush=True)
+                        print(
+                            f"   {Colors.BLUE}└─{Colors.ENDC} input: {input_str}",
+                            flush=True,
+                        )
 
         # content が文字列の場合
         elif isinstance(content, str):
@@ -145,7 +150,9 @@ def log_agent_message(message):
                         if is_error:
                             print(f"{Colors.RED}✗ Tool Error:{Colors.ENDC}", flush=True)
                         else:
-                            print(f"{Colors.GREEN}✓ Tool Result:{Colors.ENDC}", flush=True)
+                            print(
+                                f"{Colors.GREEN}✓ Tool Result:{Colors.ENDC}", flush=True
+                            )
                         print(f"   {result_str}", flush=True)
 
     # ResultMessage - 最終応答
@@ -167,18 +174,8 @@ async def test_process_display():
     # .envファイルを読み込み
     load_dotenv()
 
-    # 環境変数チェック
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    base_url = os.getenv("ANTHROPIC_BASE_URL")
-
-    if not api_key:
-        print(
-            f"{Colors.RED}❌ エラー: ANTHROPIC_API_KEY が設定されていません{Colors.ENDC}"
-        )
-        return
-
-    print(f"{Colors.GREEN}✓ API Key: {api_key[:10]}...{Colors.ENDC}")
-    print(f"{Colors.GREEN}✓ Base URL: {base_url}{Colors.ENDC}\n")
+    # Note: Claude Code CLIを使用するため、Anthropic APIキーは不要
+    print(f"{Colors.GREEN}✓ Claude Code CLI を使用（APIキー不要）{Colors.ENDC}\n")
 
     # テストケース
     test_queries = [
@@ -213,10 +210,6 @@ async def test_process_display():
                     allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
                     permission_mode="bypassPermissions",  # テスト用に全許可
                     max_turns=10,
-                    env={
-                        "ANTHROPIC_API_KEY": api_key,
-                        "ANTHROPIC_BASE_URL": base_url,
-                    },
                 ),
             ):
                 # メッセージを表示

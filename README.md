@@ -44,9 +44,9 @@ cp .env.example .env
 
 ```env
 DISCORD_BOT_TOKEN=your_discord_bot_token
-ANTHROPIC_API_KEY=your_anthropic_api_key
-ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic  # Z.AI使用時
 ```
+
+**Note**: Claude Code CLIを使用するため、Anthropic APIキーは不要です。
 
 ### 3. 起動
 
