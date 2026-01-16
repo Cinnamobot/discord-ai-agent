@@ -889,6 +889,23 @@ class DiscordAIBot(commands.Bot):
             status_msg = await thread.send("🤔 処理中...（新規会話）")
             logger.info("Starting new session")
 
+        # ターミナルログ出力開始
+        print(f"\n{Colors.HEADER}{'=' * 80}{Colors.ENDC}", flush=True)
+        print(
+            f"{Colors.BOLD}{Colors.CYAN}🤖 Agent SDK 実行開始{Colors.ENDC}", flush=True
+        )
+        print(f"{Colors.BLUE}📝 Thread:{Colors.ENDC} {thread.id}", flush=True)
+        print(
+            f"{Colors.BLUE}📝 User Message:{Colors.ENDC} {user_prompt[:100]}...",
+            flush=True,
+        )
+        if sdk_session_id:
+            print(
+                f"{Colors.YELLOW}🔄 Session Resume:{Colors.ENDC} {sdk_session_id[:20]}...",
+                flush=True,
+            )
+        print(f"{Colors.HEADER}{'=' * 80}{Colors.ENDC}\n", flush=True)
+
         try:
             async with thread.typing():
                 result_text = ""
@@ -908,19 +925,22 @@ class DiscordAIBot(commands.Bot):
                         resume=sdk_session_id,  # セッションを継続
                     ),
                 ):
-                    # 思考プロセスの可視化
+                    # ターミナルにログ表示
+                    self._log_agent_message(agent_message)
+
+                    # 思考プロセスの可視化（Discord）
                     if hasattr(agent_message, "thinking") and agent_message.thinking:
                         thinking_preview = agent_message.thinking[:300]
                         if len(agent_message.thinking) > 300:
                             thinking_preview += "..."
                         await thread.send(f"💭 **思考:**\n```\n{thinking_preview}\n```")
 
-                    # ツール使用の表示
+                    # ツール使用の表示（Discord）
                     if hasattr(agent_message, "tool_name") and agent_message.tool_name:
                         current_tool = agent_message.tool_name
 
-                        # パラメータを整形
-                        params_str = ""
+                        # パラメータを簡潔に表示
+                        params_summary = ""
                         if (
                             hasattr(agent_message, "tool_params")
                             and agent_message.tool_params
@@ -933,39 +953,62 @@ class DiscordAIBot(commands.Bot):
                                     if isinstance(agent_message.tool_params, dict)
                                     else {}
                                 )
+
+                                # 重要なパラメータのみ表示
+                                key_params = {}
+                                if "filePath" in params_dict:
+                                    key_params["file"] = params_dict["filePath"]
+                                if "command" in params_dict:
+                                    key_params["cmd"] = params_dict["command"][:50]
+                                if "pattern" in params_dict:
+                                    key_params["pattern"] = params_dict["pattern"]
+                                if "url" in params_dict:
+                                    key_params["url"] = params_dict["url"]
+
+                                if key_params:
+                                    params_summary = " → " + ", ".join(
+                                        f"{k}: {v}" for k, v in key_params.items()
+                                    )
+
+                                # DBログ用に完全なパラメータを保存
                                 params_str = json.dumps(
                                     params_dict, indent=2, ensure_ascii=False
                                 )
-                                if len(params_str) > 500:
-                                    params_str = params_str[:500] + "\n..."
                             except:
                                 params_str = str(agent_message.tool_params)[:500]
+                                params_summary = ""
 
-                        tool_msg = f"🔧 **ツール:** `{current_tool}`"
-                        if params_str:
-                            tool_msg += f"\n```json\n{params_str}\n```"
-
+                        # コンパクトな表示
+                        tool_msg = f"🔧 `{current_tool}`{params_summary}"
                         await thread.send(tool_msg)
-                        await status_msg.edit(
-                            content=f"⚙️ 実行中... (ツール: {current_tool})"
-                        )
+
+                        await status_msg.edit(content=f"⚙️ 実行中: {current_tool}...")
 
                         # DBにツールログ保存
                         self.session_store.log_tool_use(
                             thread_id=thread.id,
                             tool_name=current_tool,
-                            tool_params=params_str,
+                            tool_params=params_str if "params_str" in locals() else "",
                         )
 
-                    # ツール結果の表示
+                    # ツール結果の表示（Discord - コンパクトに）
                     if (
                         hasattr(agent_message, "tool_result")
                         and agent_message.tool_result
                     ):
-                        result_preview = str(agent_message.tool_result)[:500]
-                        if len(str(agent_message.tool_result)) > 500:
+                        result_str = str(agent_message.tool_result)
+                        result_preview = result_str[:200]
+                        if len(result_str) > 200:
                             result_preview += "..."
-                        await thread.send(f"✅ **結果:**\n```\n{result_preview}\n```")
+
+                        # 結果が長い場合は行数を表示
+                        if len(result_str) > 200:
+                            line_count = result_str.count("\n") + 1
+                            await thread.send(
+                                f"✓ 完了 ({len(result_str)} chars, {line_count} lines)"
+                            )
+                        else:
+                            await thread.send(f"✓ 完了")
 
                     # 最終結果
                     if hasattr(agent_message, "result") and agent_message.result:
@@ -1003,9 +1046,25 @@ class DiscordAIBot(commands.Bot):
                 else:
                     await thread.send("⚠️ 応答がありませんでした。")
 
+                # ターミナルログ出力終了
+                print(f"\n{Colors.HEADER}{'=' * 80}{Colors.ENDC}", flush=True)
+                print(
+                    f"{Colors.BOLD}{Colors.GREEN}✅ Agent SDK 実行完了{Colors.ENDC}",
+                    flush=True,
+                )
+                print(
+                    f"{Colors.BLUE}📤 Response Length:{Colors.ENDC} {len(result_text)} chars",
+                    flush=True,
+                )
+                print(f"{Colors.HEADER}{'=' * 80}{Colors.ENDC}\n", flush=True)
+
         except Exception as e:
             logger.error(f"Agent実行エラー: {e}", exc_info=True)
             await status_msg.edit(content=f"❌ エラーが発生しました: {e}")
+
+            # ターミナルにエラー出力
+            print(f"\n{Colors.RED}❌ Agent実行エラー:{Colors.ENDC} {e}", flush=True)
+            print(f"{Colors.HEADER}{'=' * 80}{Colors.ENDC}\n", flush=True)
 
     async def send_response_to_thread(self, thread: discord.Thread, response: str):
         """
