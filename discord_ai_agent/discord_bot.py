@@ -1003,8 +1003,10 @@ class DiscordAIBot(commands.Bot):
                                     else:
                                         params_str = str(tool_input)[:500]
 
-                                    # コンパクトな表示
-                                    tool_msg = f"🔧 `{tool_name}`{params_summary}"
+                                    # コンパクトな表示（コードブロック）
+                                    tool_msg = (
+                                        f"```\n🔧 {tool_name}{params_summary}\n```"
+                                    )
                                     await thread.send(tool_msg)
 
                                     await status_msg.edit(
@@ -1035,17 +1037,17 @@ class DiscordAIBot(commands.Bot):
 
                                     if is_error:
                                         await thread.send(
-                                            f"❌ エラー: {result_str[:200]}"
+                                            f"```\n❌ エラー: {result_str[:200]}\n```"
                                         )
                                     else:
                                         # 結果が長い場合は行数を表示
                                         if len(result_str) > 200:
                                             line_count = result_str.count("\n") + 1
                                             await thread.send(
-                                                f"✓ 完了 ({len(result_str)} chars, {line_count} lines)"
+                                                f"```\n✓ 完了 ({len(result_str)} chars, {line_count} lines)\n```"
                                             )
                                         else:
-                                            await thread.send(f"✓ 完了")
+                                            await thread.send(f"```\n✓ 完了\n```")
 
                     # ResultMessage - 最終結果
                     if msg_type == "ResultMessage":
