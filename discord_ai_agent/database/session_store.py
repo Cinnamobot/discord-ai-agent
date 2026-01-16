@@ -29,11 +29,37 @@ class SessionStore:
 
         # Create tables
         Base.metadata.create_all(self.engine)
+
+        # Run migrations (add new columns if they don't exist)
+        self._run_migrations()
+
         logger.info(f"Session store initialized: {self.db_path}")
 
     def _get_session(self) -> Session:
         """Get a new database session"""
         return self.SessionLocal()
+
+    def _run_migrations(self):
+        """Run database migrations to add new columns"""
+        from sqlalchemy import inspect, text
+
+        inspector = inspect(self.engine)
+
+        # Check if sdk_session_id column exists in thread_sessions
+        columns = [col["name"] for col in inspector.get_columns("thread_sessions")]
+
+        if "sdk_session_id" not in columns:
+            logger.info(
+                "Running migration: adding sdk_session_id column to thread_sessions"
+            )
+            with self.engine.connect() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE thread_sessions ADD COLUMN sdk_session_id VARCHAR(255)"
+                    )
+                )
+                conn.commit()
+            logger.info("Migration completed: sdk_session_id column added")
 
     # ========== Thread Session Management ==========
 
@@ -101,6 +127,30 @@ class SessionStore:
             if session:
                 session.last_active_at = datetime.utcnow()
                 db.commit()
+        finally:
+            db.close()
+
+    def update_sdk_session_id(self, thread_id: int, sdk_session_id: str) -> None:
+        """
+        Update Claude Agent SDK session ID for a thread
+
+        Args:
+            thread_id: Discord thread ID
+            sdk_session_id: Claude Agent SDK session ID
+        """
+        db = self._get_session()
+        try:
+            session = (
+                db.query(ThreadSession)
+                .filter(ThreadSession.thread_id == thread_id)
+                .first()
+            )
+            if session:
+                session.sdk_session_id = sdk_session_id
+                db.commit()
+                logger.info(
+                    f"Updated SDK session ID for thread {thread_id}: {sdk_session_id}"
+                )
         finally:
             db.close()
 

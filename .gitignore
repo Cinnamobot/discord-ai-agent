@@ -40,6 +40,12 @@ env/
 # Logs
 *.log
 
+# Database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # OS
 .DS_Store
 Thumbs.db

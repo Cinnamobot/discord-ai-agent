@@ -16,6 +16,7 @@ class ThreadSession(Base):
     thread_id = Column(Integer, primary_key=True)
     user_id = Column(Integer, nullable=False, index=True)
     agent_name = Column(String(255), nullable=False)
+    sdk_session_id = Column(String(255), nullable=True)  # Claude Agent SDK session ID
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_active_at = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False

@@ -777,13 +777,23 @@ class DiscordAIBot(commands.Bot):
             thread_id=thread.id, role="user", content=user_prompt
         )
 
+        # 既存のセッションを取得
+        session = self.session_store.get_thread_session(thread.id)
+        sdk_session_id = session.sdk_session_id if session else None
+
         # ステータスメッセージ
-        status_msg = await thread.send("🤔 処理中...")
+        if sdk_session_id:
+            status_msg = await thread.send("🤔 処理中...（会話を継続）")
+            logger.info(f"Resuming session: {sdk_session_id}")
+        else:
+            status_msg = await thread.send("🤔 処理中...（新規会話）")
+            logger.info("Starting new session")
 
         try:
             async with thread.typing():
                 result_text = ""
                 current_tool = None
+                new_session_id = None
 
                 # Agent SDK実行
                 async for agent_message in query(
@@ -795,6 +805,7 @@ class DiscordAIBot(commands.Bot):
                         env=self.env_vars,
                         cwd=str(self.agent_config.workspace),
                         system_prompt=self.agent_config.system_prompt,
+                        resume=sdk_session_id,  # セッションを継続
                     ),
                 ):
                     # 思考プロセスの可視化
@@ -860,11 +871,23 @@ class DiscordAIBot(commands.Bot):
                     if hasattr(agent_message, "result") and agent_message.result:
                         result_text = agent_message.result
 
+                    # セッションIDを取得
+                    if (
+                        hasattr(agent_message, "session_id")
+                        and agent_message.session_id
+                    ):
+                        new_session_id = agent_message.session_id
+                        logger.info(f"Got session ID: {new_session_id}")
+
                     # エラー
                     if hasattr(agent_message, "error") and agent_message.error:
                         await thread.send(f"❌ **エラー:** {agent_message.error}")
                         await status_msg.delete()
                         return
+
+                # セッションIDをDBに保存
+                if new_session_id:
+                    self.session_store.update_sdk_session_id(thread.id, new_session_id)
 
                 # ステータスメッセージを削除
                 await status_msg.delete()
