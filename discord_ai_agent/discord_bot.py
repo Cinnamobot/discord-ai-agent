@@ -917,7 +917,7 @@ class DiscordAIBot(commands.Bot):
                     prompt=user_prompt,
                     options=ClaudeAgentOptions(
                         cli_path=str(self.claude_cli_path),
-                        permission_mode="acceptEdits",
+                        permission_mode="bypassPermissions",  # 全ツールを自動承認
                         max_turns=20,
                         env=self.env_vars,
                         cwd=str(self.agent_config.workspace),
