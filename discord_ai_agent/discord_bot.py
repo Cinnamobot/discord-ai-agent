@@ -31,6 +31,7 @@ from discord.ext import commands
 
 from .claude_cli_finder import find_claude_cli
 from .database import SessionStore
+from .message_queue import ThreadMessageQueue
 from dotenv import load_dotenv
 from datetime import datetime
 
@@ -116,6 +117,10 @@ class DiscordAIBot(commands.Bot):
         self.session_store = SessionStore(str(db_path))
         logger.info(f"セッションDB: {db_path}")
 
+        # メッセージキュー（スレッド単位）
+        self.message_queue = ThreadMessageQueue()
+        logger.info("メッセージキューシステム初期化完了")
+
         # 旧セッション管理（後方互換性のため残す）
         self.session_manager = DiscordSessionManager(
             ttl_minutes=30,
@@ -151,6 +156,17 @@ class DiscordAIBot(commands.Bot):
         logger.info(f"システムプロンプト: {len(self.agent_config.system_prompt)} 文字")
         logger.info("Bot準備完了")
 
+    async def on_message_delete(self, message: discord.Message):
+        """メッセージ削除時の処理"""
+        # スレッド内のメッセージのみ処理
+        if isinstance(message.channel, discord.Thread):
+            if message.channel.owner_id == self.user.id:
+                # キューから削除済みとしてマーク
+                if self.message_queue.mark_deleted(message.channel.id, message.id):
+                    logger.info(
+                        f"メッセージをキューから削除: thread={message.channel.id}, msg={message.id}"
+                    )
+
     async def on_message(self, message: discord.Message):
         """メッセージ受信時の処理（スレッドベース）"""
         # 自分自身のメッセージは無視
@@ -164,14 +180,33 @@ class DiscordAIBot(commands.Bot):
                 await self.create_thread_and_start(message)
             return
 
-        # 2. スレッド内のメッセージ → スレッドで処理
+        # 2. スレッド内のメッセージ → キューに追加して順次処理
         if isinstance(message.channel, discord.Thread):
             # Botが作成したスレッドのみ反応
             if message.channel.owner_id == self.user.id:
                 logger.info(
                     f"スレッド内メッセージ: {message.author.name} in thread {message.channel.id}"
                 )
-                await self.handle_thread_message(message)
+
+                # メッセージをキューに追加
+                position = self.message_queue.add_message(
+                    thread_id=message.channel.id,
+                    message_id=message.id,
+                    user_id=message.author.id,
+                    content=message.content,
+                    has_attachments=bool(message.attachments),
+                )
+
+                # キュー位置を通知（オプション）
+                if position > 0:
+                    queue_size = self.message_queue.get_queue_size(message.channel.id)
+                    await message.add_reaction("⏳")  # キューイング中を示す
+                    logger.info(
+                        f"メッセージをキューに追加: position={position}, queue_size={queue_size}"
+                    )
+
+                # 処理ワーカーを起動（既に実行中の場合はスキップ）
+                await self.process_thread_queue(message.channel)
             return
 
     async def handle_new_conversation(self, message: discord.Message):
@@ -719,9 +754,63 @@ class DiscordAIBot(commands.Bot):
             # Agent処理
             await self.process_in_thread(thread, content, message.author.id)
 
+    async def process_thread_queue(self, thread: discord.Thread):
+        """
+        スレッドのメッセージキューを順次処理
+
+        Args:
+            thread: Discord thread
+        """
+        thread_id = thread.id
+
+        # 既に処理中の場合はスキップ
+        if self.message_queue.is_processing(thread_id):
+            logger.debug(f"Thread {thread_id} is already being processed")
+            return
+
+        # ロックを取得して処理開始
+        async with self.message_queue.get_lock(thread_id):
+            self.message_queue.set_processing(thread_id, True)
+
+            try:
+                # キューが空になるまで処理
+                while True:
+                    queued_msg = self.message_queue.get_next_message(thread_id)
+
+                    if queued_msg is None:
+                        # キューが空になった
+                        logger.info(f"Queue empty for thread {thread_id}")
+                        break
+
+                    # メッセージを取得（削除されていないか確認）
+                    try:
+                        message = await thread.fetch_message(queued_msg.message_id)
+                    except discord.NotFound:
+                        logger.info(
+                            f"Message {queued_msg.message_id} not found (deleted)"
+                        )
+                        continue
+                    except discord.HTTPException as e:
+                        logger.error(
+                            f"Failed to fetch message {queued_msg.message_id}: {e}"
+                        )
+                        continue
+
+                    # リアクションを削除（キューイング中マーク）
+                    try:
+                        await message.remove_reaction("⏳", self.user)
+                    except:
+                        pass
+
+                    # メッセージを処理
+                    await self.handle_thread_message(message)
+
+            finally:
+                self.message_queue.set_processing(thread_id, False)
+
     async def handle_thread_message(self, message: discord.Message):
         """
-        スレッド内のメッセージを処理
+        スレッド内のメッセージを処理（キューから取り出された後）
 
         Args:
             message: スレッド内のユーザーメッセージ
