@@ -928,105 +928,146 @@ class DiscordAIBot(commands.Bot):
                     # ターミナルにログ表示
                     self._log_agent_message(agent_message)
 
-                    # 思考プロセスの可視化（Discord）
-                    if hasattr(agent_message, "thinking") and agent_message.thinking:
-                        thinking_preview = agent_message.thinking[:300]
-                        if len(agent_message.thinking) > 300:
-                            thinking_preview += "..."
-                        await thread.send(f"💭 **思考:**\n```\n{thinking_preview}\n```")
+                    # Discord表示用にメッセージを解析
+                    msg_type = type(agent_message).__name__
 
-                    # ツール使用の表示（Discord）
-                    if hasattr(agent_message, "tool_name") and agent_message.tool_name:
-                        current_tool = agent_message.tool_name
+                    # AssistantMessage - 思考とツール使用を含む
+                    if msg_type == "AssistantMessage" and hasattr(
+                        agent_message, "content"
+                    ):
+                        content = agent_message.content
+                        if isinstance(content, list):
+                            for item in content:
+                                item_type = type(item).__name__
 
-                        # パラメータを簡潔に表示
-                        params_summary = ""
-                        if (
-                            hasattr(agent_message, "tool_params")
-                            and agent_message.tool_params
-                        ):
-                            import json
+                                # ThinkingBlock - 思考プロセス
+                                if item_type == "ThinkingBlock":
+                                    thinking_text = getattr(item, "thinking", "")
+                                    if thinking_text:
+                                        thinking_preview = thinking_text[:300]
+                                        if len(thinking_text) > 300:
+                                            thinking_preview += "..."
+                                        await thread.send(
+                                            f"💭 **思考:**\n```\n{thinking_preview}\n```"
+                                        )
 
-                            try:
-                                params_dict = (
-                                    agent_message.tool_params
-                                    if isinstance(agent_message.tool_params, dict)
-                                    else {}
-                                )
+                                # TextBlock - テキスト（思考の場合もある）
+                                elif item_type == "TextBlock":
+                                    text = getattr(item, "text", "")
+                                    if (
+                                        text and len(text) > 20
+                                    ):  # 短すぎるテキストはスキップ
+                                        text_preview = text[:300]
+                                        if len(text) > 300:
+                                            text_preview += "..."
+                                        await thread.send(
+                                            f"💭 **思考:**\n```\n{text_preview}\n```"
+                                        )
 
-                                # 重要なパラメータのみ表示
-                                key_params = {}
-                                if "filePath" in params_dict:
-                                    key_params["file"] = params_dict["filePath"]
-                                if "command" in params_dict:
-                                    key_params["cmd"] = params_dict["command"][:50]
-                                if "pattern" in params_dict:
-                                    key_params["pattern"] = params_dict["pattern"]
-                                if "url" in params_dict:
-                                    key_params["url"] = params_dict["url"]
+                                # ToolUseBlock - ツール使用
+                                elif item_type == "ToolUseBlock":
+                                    tool_name = getattr(item, "name", "unknown")
+                                    tool_input = getattr(item, "input", {})
+                                    current_tool = tool_name
 
-                                if key_params:
-                                    params_summary = " → " + ", ".join(
-                                        f"{k}: {v}" for k, v in key_params.items()
+                                    # パラメータを簡潔に表示
+                                    params_summary = ""
+                                    if isinstance(tool_input, dict):
+                                        import json
+
+                                        # 重要なパラメータのみ表示
+                                        key_params = {}
+                                        if "filePath" in tool_input:
+                                            key_params["file"] = tool_input["filePath"]
+                                        if "command" in tool_input:
+                                            key_params["cmd"] = tool_input["command"][
+                                                :50
+                                            ]
+                                        if "pattern" in tool_input:
+                                            key_params["pattern"] = tool_input[
+                                                "pattern"
+                                            ]
+                                        if "url" in tool_input:
+                                            key_params["url"] = tool_input["url"]
+
+                                        if key_params:
+                                            params_summary = " → " + ", ".join(
+                                                f"{k}: {v}"
+                                                for k, v in key_params.items()
+                                            )
+
+                                        # DBログ用に完全なパラメータを保存
+                                        params_str = json.dumps(
+                                            tool_input, indent=2, ensure_ascii=False
+                                        )
+                                    else:
+                                        params_str = str(tool_input)[:500]
+
+                                    # コンパクトな表示
+                                    tool_msg = f"🔧 `{tool_name}`{params_summary}"
+                                    await thread.send(tool_msg)
+
+                                    await status_msg.edit(
+                                        content=f"⚙️ 実行中: {tool_name}..."
                                     )
 
-                                # DBログ用に完全なパラメータを保存
-                                params_str = json.dumps(
-                                    params_dict, indent=2, ensure_ascii=False
-                                )
-                            except:
-                                params_str = str(agent_message.tool_params)[:500]
-                                params_summary = ""
+                                    # DBにツールログ保存
+                                    self.session_store.log_tool_use(
+                                        thread_id=thread.id,
+                                        tool_name=tool_name,
+                                        tool_params=params_str
+                                        if "params_str" in locals()
+                                        else "",
+                                    )
 
-                        # コンパクトな表示
-                        tool_msg = f"🔧 `{current_tool}`{params_summary}"
-                        await thread.send(tool_msg)
+                    # UserMessage - ツール結果を含む
+                    if msg_type == "UserMessage" and hasattr(agent_message, "content"):
+                        content = agent_message.content
+                        if isinstance(content, list):
+                            for item in content:
+                                item_type = type(item).__name__
 
-                        await status_msg.edit(content=f"⚙️ 実行中: {current_tool}...")
+                                # ToolResultBlock - ツール実行結果
+                                if item_type == "ToolResultBlock":
+                                    tool_result = getattr(item, "content", "")
+                                    is_error = getattr(item, "is_error", False)
+                                    result_str = str(tool_result)
 
-                        # DBにツールログ保存
-                        self.session_store.log_tool_use(
-                            thread_id=thread.id,
-                            tool_name=current_tool,
-                            tool_params=params_str if "params_str" in locals() else "",
-                        )
+                                    if is_error:
+                                        await thread.send(
+                                            f"❌ エラー: {result_str[:200]}"
+                                        )
+                                    else:
+                                        # 結果が長い場合は行数を表示
+                                        if len(result_str) > 200:
+                                            line_count = result_str.count("\n") + 1
+                                            await thread.send(
+                                                f"✓ 完了 ({len(result_str)} chars, {line_count} lines)"
+                                            )
+                                        else:
+                                            await thread.send(f"✓ 完了")
 
-                    # ツール結果の表示（Discord - コンパクトに）
-                    if (
-                        hasattr(agent_message, "tool_result")
-                        and agent_message.tool_result
-                    ):
-                        result_str = str(agent_message.tool_result)
-                        result_preview = result_str[:200]
-                        if len(result_str) > 200:
-                            result_preview += "..."
+                    # ResultMessage - 最終結果
+                    if msg_type == "ResultMessage":
+                        if hasattr(agent_message, "result") and agent_message.result:
+                            result_text = agent_message.result
 
-                        # 結果が長い場合は行数を表示
-                        if len(result_str) > 200:
-                            line_count = result_str.count("\n") + 1
-                            await thread.send(
-                                f"✓ 完了 ({len(result_str)} chars, {line_count} lines)"
-                            )
-                        else:
-                            await thread.send(f"✓ 完了")
+                        # セッションIDを取得
+                        if (
+                            hasattr(agent_message, "session_id")
+                            and agent_message.session_id
+                        ):
+                            new_session_id = agent_message.session_id
+                            logger.info(f"Got session ID: {new_session_id}")
 
-                    # 最終結果
-                    if hasattr(agent_message, "result") and agent_message.result:
-                        result_text = agent_message.result
-
-                    # セッションIDを取得
-                    if (
-                        hasattr(agent_message, "session_id")
-                        and agent_message.session_id
-                    ):
-                        new_session_id = agent_message.session_id
-                        logger.info(f"Got session ID: {new_session_id}")
-
-                    # エラー
-                    if hasattr(agent_message, "error") and agent_message.error:
-                        await thread.send(f"❌ **エラー:** {agent_message.error}")
-                        await status_msg.delete()
-                        return
+                        # エラーチェック
+                        if (
+                            hasattr(agent_message, "is_error")
+                            and agent_message.is_error
+                        ):
+                            await thread.send(f"❌ **エラーが発生しました**")
+                            await status_msg.delete()
+                            return
 
                 # セッションIDをDBに保存
                 if new_session_id:
