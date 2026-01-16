@@ -717,12 +717,13 @@ class DiscordAIBot(commands.Bot):
             await message.reply(f"⚠️ スレッドの作成に失敗しました: {e}")
             return
 
-        # データベースにセッションを記録
+        # データベースにセッションを即座に記録（重要: キュー処理前に作成）
         self.session_store.create_thread_session(
             thread_id=thread.id,
             user_id=message.author.id,
             agent_name=self.agent_config.name,
         )
+        logger.info(f"セッション作成完了: thread_id={thread.id}")
 
         # 挨拶メッセージ
         greeting = f"👋 {message.author.mention} こんにちは！\n"
@@ -735,7 +736,7 @@ class DiscordAIBot(commands.Bot):
 
         await thread.send(greeting)
 
-        # 初回プロンプトがある場合は処理
+        # 初回プロンプトがある場合は直接処理（元メッセージはスレッド外なので）
         if content:
             # 添付ファイルの処理
             if message.attachments:
@@ -751,8 +752,18 @@ class DiscordAIBot(commands.Bot):
                     await thread.send(f"⚠️ ファイルのダウンロードに失敗しました: {e}")
                     return
 
-            # Agent処理
-            await self.process_in_thread(thread, content, message.author.id)
+            # 処理中フラグを立てる（他のメッセージがキューイングされるように）
+            self.message_queue.set_processing(thread.id, True)
+
+            try:
+                # 初回メッセージを処理
+                await self.process_in_thread(thread, content, message.author.id)
+            finally:
+                # 処理中フラグを下ろす
+                self.message_queue.set_processing(thread.id, False)
+
+                # キューに溜まっている他のメッセージを処理
+                await self.process_thread_queue(thread)
 
     async def process_thread_queue(self, thread: discord.Thread):
         """
