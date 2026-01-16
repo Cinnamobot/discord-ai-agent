@@ -5,6 +5,7 @@ discord.py>=2.6.4
 claude-agent-sdk>=0.1.19
 python-dotenv>=1.2.1
 pyyaml>=6.0.3
+sqlalchemy>=2.0.0
 
 # Note: claude-agent-sdk includes anthropic SDK and aiohttp internally
 # No need to install anthropic or aiohttp separately

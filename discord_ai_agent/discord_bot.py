@@ -30,7 +30,9 @@ import discord
 from discord.ext import commands
 
 from .claude_cli_finder import find_claude_cli
+from .database import SessionStore
 from dotenv import load_dotenv
+from datetime import datetime
 
 # Agent SDK
 from claude_agent_sdk import query, ClaudeAgentOptions
@@ -109,7 +111,12 @@ class DiscordAIBot(commands.Bot):
                 logger.error(f"エージェント設定の読み込みに失敗: {e}")
                 raise
 
-        # セッション管理
+        # セッション管理（SQLiteベース）
+        db_path = self.agent_path / "sessions.db"
+        self.session_store = SessionStore(str(db_path))
+        logger.info(f"セッションDB: {db_path}")
+
+        # 旧セッション管理（後方互換性のため残す）
         self.session_manager = DiscordSessionManager(
             ttl_minutes=30,
             cleanup_interval=300,
@@ -145,34 +152,27 @@ class DiscordAIBot(commands.Bot):
         logger.info("Bot準備完了")
 
     async def on_message(self, message: discord.Message):
-        """メッセージ受信時の処理"""
-        # デバッグログ
-        logger.debug(f"メッセージ受信: {message.author.name}: {message.content[:50]}")
-
+        """メッセージ受信時の処理（スレッドベース）"""
         # 自分自身のメッセージは無視
-        if message.author == self.user:
-            logger.debug("自分のメッセージなのでスキップ")
+        if message.author.bot:
             return
 
-        # Bot mention チェック
-        is_mention = self.user.mentioned_in(message)
-        is_reply = message.reference is not None
+        # 1. チャンネルでのメンション → 新規スレッド作成
+        if isinstance(message.channel, discord.TextChannel):
+            if self.user.mentioned_in(message):
+                logger.info(f"新規スレッド作成: {message.author.name}")
+                await self.create_thread_and_start(message)
+            return
 
-        logger.debug(f"メンション: {is_mention}, 返信: {is_reply}")
-
-        # 優先順位: 返信 > メンション（返信の場合はセッション継続を優先）
-        if is_reply and is_mention:
-            logger.info(f"返信（メンション付き）検出: {message.author.name}")
-            await self.handle_reply_conversation(message)
-        elif is_mention:
-            logger.info(f"メンション検出（新規対話）: {message.author.name}")
-            await self.handle_new_conversation(message)
-        elif is_reply:
-            logger.info(f"返信（メンションなし）検出: {message.author.name}")
-            # メンションなしの返信は無視（handle_reply_conversation内でチェック）
-            await self.handle_reply_conversation(message)
-        else:
-            logger.debug("メンションでも返信でもないのでスキップ")
+        # 2. スレッド内のメッセージ → スレッドで処理
+        if isinstance(message.channel, discord.Thread):
+            # Botが作成したスレッドのみ反応
+            if message.channel.owner_id == self.user.id:
+                logger.info(
+                    f"スレッド内メッセージ: {message.author.name} in thread {message.channel.id}"
+                )
+                await self.handle_thread_message(message)
+            return
 
     async def handle_new_conversation(self, message: discord.Message):
         """新規対話の処理"""
@@ -646,6 +646,290 @@ class DiscordAIBot(commands.Bot):
             await message.channel.send(f"（続き）\n{part}")
 
         return first_message
+
+    # ========== スレッドベースの会話管理 ==========
+
+    async def create_thread_and_start(self, message: discord.Message):
+        """
+        新規スレッドを作成して会話を開始
+
+        Args:
+            message: ユーザーのメンション付きメッセージ
+        """
+        # レート制限チェック
+        allowed, error_msg = await self.rate_limiter.check_rate_limit(message.author.id)
+        if not allowed:
+            await message.reply(f"⚠️ {error_msg}")
+            return
+
+        # メンション部分を除去
+        content = message.content
+        for mention in message.mentions:
+            content = content.replace(f"<@{mention.id}>", "")
+            content = content.replace(f"<@!{mention.id}>", "")
+        content = content.strip()
+
+        # スレッド作成
+        thread_name = f"🤖 {message.author.display_name} - {datetime.now().strftime('%m/%d %H:%M')}"
+        try:
+            thread = await message.create_thread(
+                name=thread_name[:100],  # Discord thread name limit
+                auto_archive_duration=1440,  # 24 hours
+            )
+            logger.info(f"スレッド作成成功: {thread.id} - {thread_name}")
+        except discord.HTTPException as e:
+            logger.error(f"スレッド作成エラー: {e}")
+            await message.reply(f"⚠️ スレッドの作成に失敗しました: {e}")
+            return
+
+        # データベースにセッションを記録
+        self.session_store.create_thread_session(
+            thread_id=thread.id,
+            user_id=message.author.id,
+            agent_name=self.agent_config.name,
+        )
+
+        # 挨拶メッセージ
+        greeting = f"👋 {message.author.mention} こんにちは！\n"
+        if content:
+            greeting += f"\n> {content[:100]}{'...' if len(content) > 100 else ''}\n\nについて対応します。"
+        else:
+            greeting += (
+                f"私は **{self.agent_config.name}** です。何をお手伝いしましょうか？"
+            )
+
+        await thread.send(greeting)
+
+        # 初回プロンプトがある場合は処理
+        if content:
+            # 添付ファイルの処理
+            if message.attachments:
+                try:
+                    await file_manager.download_attachments(
+                        message.attachments,
+                        self.agent_config.workspace,
+                        max_file_size=1024 * 1024,  # 1MB
+                    )
+                    content += f"\n\n（{len(message.attachments)}個のファイルをworkspace/に保存しました）"
+                except (OSError, aiohttp.ClientError) as e:
+                    logger.error(f"ファイルダウンロードエラー: {e}")
+                    await thread.send(f"⚠️ ファイルのダウンロードに失敗しました: {e}")
+                    return
+
+            # Agent処理
+            await self.process_in_thread(thread, content, message.author.id)
+
+    async def handle_thread_message(self, message: discord.Message):
+        """
+        スレッド内のメッセージを処理
+
+        Args:
+            message: スレッド内のユーザーメッセージ
+        """
+        thread = message.channel
+
+        # レート制限チェック
+        allowed, error_msg = await self.rate_limiter.check_rate_limit(message.author.id)
+        if not allowed:
+            await thread.send(f"⚠️ {error_msg}")
+            return
+
+        # セッションの存在確認と更新
+        session = self.session_store.get_thread_session(thread.id)
+        if not session:
+            logger.warning(f"セッションが見つかりません: thread_id={thread.id}")
+            await thread.send(
+                "⚠️ セッション情報が見つかりません。新しいスレッドを作成してください。"
+            )
+            return
+
+        # 添付ファイルの処理
+        content = message.content
+        if message.attachments:
+            try:
+                await file_manager.download_attachments(
+                    message.attachments,
+                    self.agent_config.workspace,
+                    max_file_size=1024 * 1024,  # 1MB
+                )
+                content += f"\n\n（{len(message.attachments)}個のファイルをworkspace/に保存しました）"
+            except (OSError, aiohttp.ClientError) as e:
+                logger.error(f"ファイルダウンロードエラー: {e}")
+                await thread.send(f"⚠️ ファイルのダウンロードに失敗しました: {e}")
+                return
+
+        # Agent処理
+        await self.process_in_thread(thread, content, message.author.id)
+
+    async def process_in_thread(
+        self, thread: discord.Thread, user_prompt: str, user_id: int
+    ):
+        """
+        スレッド内でAgentを実行し、思考プロセスを可視化
+
+        Args:
+            thread: Discord thread
+            user_prompt: ユーザーのプロンプト
+            user_id: ユーザーID
+        """
+        # ユーザーメッセージをDBに保存
+        self.session_store.add_message(
+            thread_id=thread.id, role="user", content=user_prompt
+        )
+
+        # ステータスメッセージ
+        status_msg = await thread.send("🤔 処理中...")
+
+        try:
+            async with thread.typing():
+                result_text = ""
+                current_tool = None
+
+                # Agent SDK実行
+                async for agent_message in query(
+                    prompt=user_prompt,
+                    options=ClaudeAgentOptions(
+                        cli_path=str(self.claude_cli_path),
+                        permission_mode="acceptEdits",
+                        max_turns=20,
+                        env=self.env_vars,
+                        cwd=str(self.agent_config.workspace),
+                        system_prompt=self.agent_config.system_prompt,
+                    ),
+                ):
+                    # 思考プロセスの可視化
+                    if hasattr(agent_message, "thinking") and agent_message.thinking:
+                        thinking_preview = agent_message.thinking[:300]
+                        if len(agent_message.thinking) > 300:
+                            thinking_preview += "..."
+                        await thread.send(f"💭 **思考:**\n```\n{thinking_preview}\n```")
+
+                    # ツール使用の表示
+                    if hasattr(agent_message, "tool_name") and agent_message.tool_name:
+                        current_tool = agent_message.tool_name
+
+                        # パラメータを整形
+                        params_str = ""
+                        if (
+                            hasattr(agent_message, "tool_params")
+                            and agent_message.tool_params
+                        ):
+                            import json
+
+                            try:
+                                params_dict = (
+                                    agent_message.tool_params
+                                    if isinstance(agent_message.tool_params, dict)
+                                    else {}
+                                )
+                                params_str = json.dumps(
+                                    params_dict, indent=2, ensure_ascii=False
+                                )
+                                if len(params_str) > 500:
+                                    params_str = params_str[:500] + "\n..."
+                            except:
+                                params_str = str(agent_message.tool_params)[:500]
+
+                        tool_msg = f"🔧 **ツール:** `{current_tool}`"
+                        if params_str:
+                            tool_msg += f"\n```json\n{params_str}\n```"
+
+                        await thread.send(tool_msg)
+                        await status_msg.edit(
+                            content=f"⚙️ 実行中... (ツール: {current_tool})"
+                        )
+
+                        # DBにツールログ保存
+                        self.session_store.log_tool_use(
+                            thread_id=thread.id,
+                            tool_name=current_tool,
+                            tool_params=params_str,
+                        )
+
+                    # ツール結果の表示
+                    if (
+                        hasattr(agent_message, "tool_result")
+                        and agent_message.tool_result
+                    ):
+                        result_preview = str(agent_message.tool_result)[:500]
+                        if len(str(agent_message.tool_result)) > 500:
+                            result_preview += "..."
+                        await thread.send(f"✅ **結果:**\n```\n{result_preview}\n```")
+
+                    # 最終結果
+                    if hasattr(agent_message, "result") and agent_message.result:
+                        result_text = agent_message.result
+
+                    # エラー
+                    if hasattr(agent_message, "error") and agent_message.error:
+                        await thread.send(f"❌ **エラー:** {agent_message.error}")
+                        await status_msg.delete()
+                        return
+
+                # ステータスメッセージを削除
+                await status_msg.delete()
+
+                # 最終応答を送信
+                if result_text:
+                    await self.send_response_to_thread(thread, result_text)
+
+                    # DBに保存
+                    self.session_store.add_message(
+                        thread_id=thread.id, role="assistant", content=result_text
+                    )
+                else:
+                    await thread.send("⚠️ 応答がありませんでした。")
+
+        except Exception as e:
+            logger.error(f"Agent実行エラー: {e}", exc_info=True)
+            await status_msg.edit(content=f"❌ エラーが発生しました: {e}")
+
+    async def send_response_to_thread(self, thread: discord.Thread, response: str):
+        """
+        スレッドに応答を送信（2000文字制限対応）
+
+        Args:
+            thread: Discord thread
+            response: 応答テキスト
+        """
+        MAX_LENGTH = 1950
+
+        if len(response) <= MAX_LENGTH:
+            await thread.send(response)
+            return
+
+        # 長い応答は分割して送信
+        parts = []
+        current_part = ""
+
+        for line in response.split("\n"):
+            if len(line) > MAX_LENGTH:
+                if current_part:
+                    parts.append(current_part)
+                    current_part = ""
+                # 長い行を分割
+                for i in range(0, len(line), MAX_LENGTH):
+                    parts.append(line[i : i + MAX_LENGTH])
+            elif len(current_part) + len(line) + 1 > MAX_LENGTH:
+                parts.append(current_part)
+                current_part = line
+            else:
+                if current_part:
+                    current_part += "\n" + line
+                else:
+                    current_part = line
+
+        if current_part:
+            parts.append(current_part)
+
+        # 分割して送信
+        for i, part in enumerate(parts):
+            if i == 0:
+                await thread.send(part)
+            else:
+                if len(part) > 1950:
+                    part = part[:1950] + "..."
+                await thread.send(f"（続き）\n{part}")
 
 
 def main():
