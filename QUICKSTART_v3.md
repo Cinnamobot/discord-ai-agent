@@ -1,7 +1,7 @@
-# Discord AI Agent Bot v3.0 - Quick Start Guide
+# Discord AI Agent Bot v3.1 - Quick Start Guide
 
-**Version**: 3.0.0  
-**Last Updated**: 2025-01-15
+**Version**: 3.1.0  
+**Last Updated**: 2025-01-16
 
 ---
 
@@ -60,15 +60,16 @@ PYTHONUNBUFFERED=1 uv run python run.py
 # または、Pythonオプションを使用
 uv run python -u run.py
 
-# Specify agent (optional)
-uv run python -u run.py ./agents/python-tutor
+# カスタムエージェントディレクトリを指定 (オプション)
+uv run python -u run.py ./my-agents
 ```
 
 Expected logs:
 ```
 INFO - ログイン成功: YourBot#1234 (ID: 123456789)
-INFO - エージェント名: Default Agent
-INFO - ワークスペース: C:\...\agents\default\workspace
+INFO - Agent registry initialized with 8 agents
+INFO - 利用可能なエージェント: default, minimal, creative, idea-digger, ...
+INFO - Slash commands synced
 INFO - Bot準備完了
 ```
 
@@ -76,21 +77,58 @@ INFO - Bot準備完了
 
 ### Step 5: Test on Discord
 
-**New Conversation:**
+#### 🎯 スラッシュコマンド (推奨 - v3.1.0+)
+
+**エージェントを選択して新規スレッド作成:**
+```
+/create-thread agent:python-tutor message:Pythonを教えて
+```
+
+**チャンネルのデフォルトエージェントを設定:**
+```
+/settings agent:default
+```
+
+**現在の設定を確認:**
+```
+/settings
+```
+
+#### 📢 メンション (従来の方法)
+
+**新規会話:**
 ```
 @ai-agent Hello! Can you help me with Python?
 ```
 
-**Continue Conversation (reply to bot's message):**
+チャンネルに設定されたデフォルトエージェント（未設定の場合は"default"）でスレッドが作成されます。
+
+**スレッド内で会話を継続:**
 ```
-@ai-agent Yes, please explain more
+Yes, please explain more
 ```
 
 ---
 
-## 📋 What's New in v3.0
+## 📋 What's New in v3.1
 
-### ✅ Completed Features
+### 🎯 New in v3.1.0 (2025-01-16)
+
+1. **コマンドベースのエージェント選択**
+   - `/create-thread` - エージェントを選択して新規スレッド作成
+   - `/settings` - チャンネルごとのデフォルトエージェント設定
+   - オートコンプリート機能で簡単に選択
+   
+2. **エージェント自動検出**
+   - `agents/` ディレクトリを自動スキャン
+   - 新しいエージェントを追加するだけで自動的に利用可能
+   
+3. **柔軟なアーキテクチャ**
+   - 起動時にエージェントを指定する必要なし
+   - スレッドごとに異なるエージェントを使用可能
+   - チャンネルごとに設定を管理
+
+### ✅ Completed Features in v3.0
 
 1. **Agent SDK Integration**
    - 68% code reduction (1,470 → 470 lines)

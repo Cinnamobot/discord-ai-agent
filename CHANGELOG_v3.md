@@ -1,21 +1,143 @@
-# Discord AI Agent Bot v3.0 - Changelog
+# Discord AI Agent Bot v3.1 - Changelog
 
 **Release Date**: 2025-01-15  
-**Latest Update**: 2025-01-15 (v3.0.1 - プロセス表示機能追加)  
-**Status**: ✅ Production Ready (with session continuity & process display)
+**Latest Update**: 2025-01-16 (v3.1.0 - コマンドベースのエージェント選択システム)  
+**Status**: ✅ Production Ready
 
 ---
 
 ## 📋 Summary
 
-Discord AI Agent Bot v3.0 successfully integrates the Claude Agent SDK, achieving:
+Discord AI Agent Bot v3.1 introduces command-based agent selection, making it easier to use multiple agents:
 
-- **68% code reduction** (1,470 → 470 lines)
+- **Command-based agent selection** with slash commands
+- **Per-channel default agent settings**
+- **Agent auto-discovery** from agents/ directory
+- **Flexible architecture** - no need to specify agent at startup
+- **68% code reduction** from v2.0 (1,470 → 470 lines in v3.0)
 - **Advanced features** via Agent SDK (tools, permissions, session management)
 - **Production-ready security** with `acceptEdits` permission mode
 - **Full session continuity** with conversation history tracking
-- **Real-time process display** with color-coded terminal output (v3.0.1)
+- **Real-time process display** with color-coded terminal output
 - **Z.AI backend** compatibility maintained
+
+---
+
+## 🎯 v3.1.0 (2025-01-16) - コマンドベースのエージェント選択システム
+
+### 新機能
+
+#### 1. スラッシュコマンド
+
+**`/create-thread`**
+- エージェントを選択して新規スレッド作成
+- オートコンプリート機能でエージェント選択が簡単
+- 初期メッセージを指定可能 (オプション)
+
+```
+/create-thread agent:python-tutor message:Pythonを教えて
+```
+
+**`/settings`**
+- チャンネルごとのデフォルトエージェント設定
+- 現在の設定を確認
+- 設定のクリア
+
+```
+/settings agent:default
+/settings
+```
+
+#### 2. エージェント自動検出
+
+- `agents/` ディレクトリを起動時に自動スキャン
+- 新しいエージェントを追加するだけで自動的に利用可能
+- `agent.yaml` に `description` フィールドを追加可能
+
+#### 3. 柔軟なアーキテクチャ
+
+**Before (v3.0.3以前)**:
+```bash
+# エージェントごとにBotを起動
+python run.py ./agents/default
+python run.py ./agents/python-tutor
+```
+
+**After (v3.1.0以降)**:
+```bash
+# 1つのBotで全エージェントを使用可能
+python run.py
+
+# Discord上でエージェントを選択
+/create-thread agent:python-tutor
+```
+
+#### 4. チャンネルごとの設定
+
+- チャンネルごとにデフォルトエージェントを設定可能
+- メンション時に自動的にデフォルトエージェントが使用される
+- 設定はデータベースに永続化
+
+#### 5. データベーススキーマ拡張
+
+**新しいテーブル: `channel_settings`**
+```sql
+CREATE TABLE channel_settings (
+    channel_id BIGINT PRIMARY KEY,
+    guild_id BIGINT NOT NULL,
+    default_agent VARCHAR(255),
+    created_at DATETIME,
+    updated_at DATETIME
+);
+```
+
+### 変更内容
+
+#### 新規ファイル
+
+- `discord_ai_agent/agent_registry.py` - エージェント管理クラス
+- `discord_ai_agent/commands.py` - スラッシュコマンド実装
+
+#### 変更ファイル
+
+- `discord_ai_agent/discord_bot.py` - Agent Registry統合、multi-agent対応
+- `discord_ai_agent/database/models.py` - ChannelSettingsモデル追加
+- `discord_ai_agent/database/session_store.py` - ChannelSettings CRUD追加
+- `discord_ai_agent/cli.py` - エージェントディレクトリ指定方式に変更
+- `run.py` - デフォルトで`./agents`を使用
+
+### アーキテクチャ変更
+
+**Before**:
+```
+起動時 → 1 Bot Instance = 1 Agent (固定)
+```
+
+**After**:
+```
+起動時 → 1 Bot Instance → Agent Registry (全エージェント)
+              ↓
+      コマンド/メンション時にエージェント選択
+              ↓
+      Thread単位でエージェントを管理
+```
+
+### 後方互換性
+
+- ✅ 既存のスレッドは引き続き動作
+- ✅ データベースマイグレーションは自動実行
+- ✅ 従来のメンション方式も継続サポート
+- ✅ 既存の`agent.yaml`ファイルはそのまま使用可能
+
+### 統計
+
+| 項目 | v3.0.3 | v3.1.0 | 変化 |
+|------|--------|--------|------|
+| コア実装 | 470行 | 1,171行 | +149% |
+| スラッシュコマンド | 0個 | 2個 | NEW |
+| データベーステーブル | 3個 | 4個 | +1 |
+
+**Note**: コード量が増加したのは、コマンド実装とエージェント管理機能の追加によるもの。Agent SDK統合による削減効果(v2.0比-68%)は維持されています。
 
 ---
 

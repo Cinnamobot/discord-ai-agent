@@ -1,6 +1,6 @@
 # Discord AI Agent Bot
 
-**Version**: 3.0.3  
+**Version**: 3.1.0  
 **Status**: Production Ready
 
 Discord上で動作する高機能AIエージェントボットです。**Claude Agent SDK**を使用して、8つの専門エージェントを実行できます。
@@ -9,8 +9,10 @@ Discord上で動作する高機能AIエージェントボットです。**Claude
 
 ## ✨ 特徴
 
+- 🎯 **コマンドベースのエージェント選択** - スラッシュコマンドで直感的に選択
 - 🤖 **8つの専門エージェント** - 汎用から投資分析まで
-- 🔄 **セッション継続** - 返信で会話を記憶
+- ⚙️ **チャンネルごとの設定** - デフォルトエージェントを個別に設定
+- 🔄 **セッション継続** - スレッドで会話を記憶
 - 🛡️ **本番環境対応** - セキュリティ・レート制限・エラーハンドリング
 - 📊 **リアルタイム表示** - エージェントの思考プロセスを可視化
 - 📈 **Market Analyst** - ローカルニュース連携の本格投資分析
@@ -55,15 +57,32 @@ DISCORD_BOT_TOKEN=your_discord_bot_token
 $env:PYTHONUNBUFFERED = "1"  # Windows
 export PYTHONUNBUFFERED=1    # Linux/Mac
 
-# Default Agent起動
+# Bot起動 (全エージェントを読み込み)
 uv run python run.py
 ```
 
 ### 4. Discordで使用
 
+#### スラッシュコマンド
+
+```
+# エージェントを選択して新規スレッド作成
+/create-thread agent:default message:こんにちは
+
+# チャンネルのデフォルトエージェントを設定
+/settings agent:default
+
+# 現在の設定を確認
+/settings
+```
+
+#### メンション（従来の方法）
+
 ```
 @ai-agent こんにちは！何ができる？
 ```
+
+チャンネルに設定されたデフォルトエージェントでスレッドが作成されます。
 
 **詳細**: `QUICKSTART_v3.md` を参照
 
@@ -82,13 +101,17 @@ uv run python run.py
 | 7 | **Python Tutor** | Python学習 | コード学習サポート |
 | 8 | **Market Analyst** ⭐ | 投資分析 | ファクトベース投資判断 |
 
-**起動例**:
-```bash
-# アイデア発掘
-uv run python run.py ./agents/idea-digger
+### エージェントの使い方
 
-# 投資分析（ニュース取得スクリプト設定後）
-uv run python run.py ./agents/market-analyst
+**v3.1.0以降**: Bot起動後、Discordで `/create-thread` コマンドからエージェントを選択
+
+```
+/create-thread agent:idea-digger message:新しいアイデアを探したい
+```
+
+**従来の方法（非推奨）**:
+```bash
+uv run python run.py ./agents/idea-digger
 ```
 
 **詳細**: `AGENTS_SUMMARY.md` を参照
@@ -119,24 +142,44 @@ uv run python run.py ./agents/market-analyst
 
 ## 🎯 主な機能
 
-### 1. Agent SDK統合
+### 1. コマンドベースのエージェント選択 (NEW in v3.1.0)
+
+```
+# エージェントを選択して新規スレッド作成
+/create-thread agent:technical message:システム設計を相談したい
+
+# チャンネルごとにデフォルトエージェントを設定
+/settings agent:creative
+
+# メンション時は設定されたデフォルトエージェントが使用される
+@ai-agent 新しいアイデアを考えて
+```
+
+**特徴**:
+- 起動時にエージェントを指定する必要なし
+- Discord上で直感的に選択可能
+- チャンネルごとに異なるエージェントを設定
+- スレッドごとに異なるエージェントを使用可能
+
+### 2. Agent SDK統合
 
 - **68%コード削減** (1,470行 → 470行)
 - エージェントループ自動化
 - ツール実行の自律化
 - セキュリティ内蔵
 
-### 2. セッション継続
+### 3. スレッドベースのセッション継続
 
 ```
-ユーザー: @ai-agent こんにちは
-Bot: こんにちは！
+ユーザー: /create-thread agent:default message:こんにちは
+Bot: 👋 こんにちは！（スレッド作成）
 
-ユーザー: @ai-agent さっきの会話覚えてる？（返信）
+（スレッド内で）
+ユーザー: さっきの会話覚えてる？
 Bot: はい、先ほど挨拶をしていただきましたね！ ← 記憶している
 ```
 
-### 3. リアルタイムプロセス表示
+### 4. リアルタイムプロセス表示
 
 ```
 ================================================================================
@@ -159,7 +202,7 @@ Bot: はい、先ほど挨拶をしていただきましたね！ ← 記憶し�
    Here's the content...
 ```
 
-### 4. Market Analyst（最も高度）
+### 5. Market Analyst（最も高度）
 
 **ローカルニュースキャッシュシステム**:
 
@@ -197,13 +240,18 @@ Market Analyst Agentが分析
 
 ```
 discord-AI-agent/
-├── run.py                         # 🚀 起動スクリプト
-├── src/
-│   ├── discord_bot.py            # メインボット
-│   ├── session_adapter.py        # セッション管理
-│   ├── rate_limit.py             # レート制限
-│   └── file_manager.py           # ファイル管理
-├── agents/                        # 8つのエージェント
+├── run.py                              # 🚀 起動スクリプト
+├── discord_ai_agent/
+│   ├── discord_bot.py                 # メインボット
+│   ├── agent_registry.py              # エージェント管理 (NEW)
+│   ├── commands.py                    # スラッシュコマンド (NEW)
+│   ├── session_adapter.py             # セッション管理
+│   ├── rate_limit.py                  # レート制限
+│   ├── file_manager.py                # ファイル管理
+│   └── database/
+│       ├── models.py                  # データベースモデル
+│       └── session_store.py           # セッション永続化
+├── agents/                             # 8つのエージェント
 │   ├── default/
 │   ├── minimal/
 │   ├── creative/
@@ -211,10 +259,11 @@ discord-AI-agent/
 │   ├── brainstorm-partner/
 │   ├── technical/
 │   ├── python-tutor/
-│   └── market-analyst/
-│       └── workspace/            # ニュース・分析保存
-├── docs/                          # ドキュメント
-└── test_*.py                      # テストスクリプト
+│   ├── market-analyst/
+│   │   └── workspace/                 # ニュース・分析保存
+│   └── shared_sessions.db             # 共有セッションDB (NEW)
+├── docs/                               # ドキュメント
+└── test_*.py                           # テストスクリプト
 ```
 
 ---
@@ -277,11 +326,17 @@ Issue・PRを歓迎します！
 
 ## 📊 統計
 
-| 項目 | v2.0 | v3.0.3 | 変化 |
-|------|------|--------|------|
-| コア実装 | 1,470行 | 470行 | -68% |
-| エージェント数 | 2個 | 8個 | +300% |
-| ドキュメント | 5個 | 11個 | +120% |
+| 項目 | v2.0 | v3.0.3 | v3.1.0 | 変化 |
+|------|------|--------|--------|------|
+| コア実装 | 1,470行 | 470行 | 1,171行 | -20% |
+| エージェント数 | 2個 | 8個 | 8個 | +300% |
+| ドキュメント | 5個 | 11個 | 11個 | +120% |
+| Slash Commands | 0個 | 0個 | 2個 | NEW |
+
+**v3.1.0の変更点**:
+- コマンドベースのエージェント選択システム実装
+- チャンネルごとの設定機能追加
+- エージェント自動検出機能追加
 
 ---
 
@@ -310,4 +365,4 @@ MIT License
 
 ---
 
-**Version**: 3.0.3 | **Author**: Discord AI Agent Team | **License**: MIT
+**Version**: 3.1.0 | **Author**: Discord AI Agent Team | **License**: MIT
