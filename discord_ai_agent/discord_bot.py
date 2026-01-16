@@ -911,6 +911,7 @@ class DiscordAIBot(commands.Bot):
                 result_text = ""
                 current_tool = None
                 new_session_id = None
+                current_tool_message = None  # ツールメッセージのIDを保持
 
                 # Agent SDK実行
                 async for agent_message in query(
@@ -940,16 +941,19 @@ class DiscordAIBot(commands.Bot):
                             for item in content:
                                 item_type = type(item).__name__
 
-                                # ThinkingBlock - 思考プロセス
+                                # ThinkingBlock - 思考プロセス（-# プレフィックス）
                                 if item_type == "ThinkingBlock":
                                     thinking_text = getattr(item, "thinking", "")
                                     if thinking_text:
                                         thinking_preview = thinking_text[:300]
                                         if len(thinking_text) > 300:
                                             thinking_preview += "..."
-                                        await thread.send(
-                                            f"💭 **思考:**\n```\n{thinking_preview}\n```"
+                                        # -# を各行の先頭に付ける
+                                        thinking_lines = thinking_preview.split("\n")
+                                        formatted_thinking = "\n".join(
+                                            f"-# {line}" for line in thinking_lines
                                         )
+                                        await thread.send(f"💭 {formatted_thinking}")
 
                                 # TextBlock - テキスト（思考の場合もある）
                                 elif item_type == "TextBlock":
@@ -960,9 +964,12 @@ class DiscordAIBot(commands.Bot):
                                         text_preview = text[:300]
                                         if len(text) > 300:
                                             text_preview += "..."
-                                        await thread.send(
-                                            f"💭 **思考:**\n```\n{text_preview}\n```"
+                                        # -# を各行の先頭に付ける
+                                        text_lines = text_preview.split("\n")
+                                        formatted_text = "\n".join(
+                                            f"-# {line}" for line in text_lines
                                         )
+                                        await thread.send(f"💭 {formatted_text}")
 
                                 # ToolUseBlock - ツール使用
                                 elif item_type == "ToolUseBlock":
@@ -1003,11 +1010,9 @@ class DiscordAIBot(commands.Bot):
                                     else:
                                         params_str = str(tool_input)[:500]
 
-                                    # コンパクトな表示（コードブロック）
-                                    tool_msg = (
-                                        f"```\n🔧 {tool_name}{params_summary}\n```"
-                                    )
-                                    await thread.send(tool_msg)
+                                    # ツールメッセージを送信（後で編集する）
+                                    tool_msg = f"```\n🔧 {tool_name}{params_summary}\n⚙️ 実行中...\n```"
+                                    current_tool_message = await thread.send(tool_msg)
 
                                     await status_msg.edit(
                                         content=f"⚙️ 実行中: {tool_name}..."
@@ -1035,19 +1040,28 @@ class DiscordAIBot(commands.Bot):
                                     is_error = getattr(item, "is_error", False)
                                     result_str = str(tool_result)
 
-                                    if is_error:
-                                        await thread.send(
-                                            f"```\n❌ エラー: {result_str[:200]}\n```"
-                                        )
-                                    else:
-                                        # 結果が長い場合は行数を表示
-                                        if len(result_str) > 200:
-                                            line_count = result_str.count("\n") + 1
-                                            await thread.send(
-                                                f"```\n✓ 完了 ({len(result_str)} chars, {line_count} lines)\n```"
-                                            )
+                                    # ツールメッセージを編集して結果を表示
+                                    if current_tool_message:
+                                        if is_error:
+                                            updated_msg = f"```\n🔧 {current_tool}\n❌ エラー: {result_str[:200]}\n```"
                                         else:
-                                            await thread.send(f"```\n✓ 完了\n```")
+                                            # 結果が長い場合は行数を表示
+                                            if len(result_str) > 200:
+                                                line_count = result_str.count("\n") + 1
+                                                updated_msg = f"```\n🔧 {current_tool}\n✓ 完了 ({len(result_str)} chars, {line_count} lines)\n```"
+                                            else:
+                                                updated_msg = f"```\n🔧 {current_tool}\n✓ 完了\n```"
+
+                                        try:
+                                            await current_tool_message.edit(
+                                                content=updated_msg
+                                            )
+                                        except discord.HTTPException as e:
+                                            logger.warning(
+                                                f"Failed to edit tool message: {e}"
+                                            )
+
+                                        current_tool_message = None  # リセット
 
                     # ResultMessage - 最終結果
                     if msg_type == "ResultMessage":
