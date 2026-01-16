@@ -19,6 +19,8 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.ruff_cache/
+.pytest_cache/
 
 # Virtual Environment
 .venv/
@@ -54,6 +56,12 @@ Thumbs.db
 sessions/
 uploads/
 temp/
+test_workspace/
+test.txt
+
+# Development notes (optional - remove if you want to keep)
+*_SUMMARY.md
+PLANS.md
 
 # Agent Workspaces (keep structure, ignore content)
 agents/*/workspace/*
