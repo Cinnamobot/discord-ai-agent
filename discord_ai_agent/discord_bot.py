@@ -912,6 +912,7 @@ class DiscordAIBot(commands.Bot):
                 current_tool = None
                 new_session_id = None
                 current_tool_message = None  # ツールメッセージのIDを保持
+                seen_thinking = set()  # 表示済みの思考を追跡（重複防止）
 
                 # Agent SDK実行
                 async for agent_message in query(
@@ -938,13 +939,24 @@ class DiscordAIBot(commands.Bot):
                     ):
                         content = agent_message.content
                         if isinstance(content, list):
+                            # まずツール使用があるかチェック
+                            has_tool_use = any(
+                                type(item).__name__ == "ToolUseBlock"
+                                for item in content
+                            )
+
                             for item in content:
                                 item_type = type(item).__name__
 
                                 # ThinkingBlock - 思考プロセス（-# プレフィックス）
-                                if item_type == "ThinkingBlock":
+                                # ツール使用がある場合のみ表示（最終結果との重複を避ける）
+                                if item_type == "ThinkingBlock" and has_tool_use:
                                     thinking_text = getattr(item, "thinking", "")
-                                    if thinking_text:
+                                    if (
+                                        thinking_text
+                                        and thinking_text not in seen_thinking
+                                    ):
+                                        seen_thinking.add(thinking_text)
                                         thinking_preview = thinking_text[:300]
                                         if len(thinking_text) > 300:
                                             thinking_preview += "..."
@@ -955,12 +967,16 @@ class DiscordAIBot(commands.Bot):
                                         )
                                         await thread.send(f"💭 {formatted_thinking}")
 
-                                # TextBlock - テキスト（思考の場合もある）
-                                elif item_type == "TextBlock":
+                                # TextBlock - テキスト
+                                # ツール使用がある場合は思考として表示、ない場合は最終結果なのでスキップ
+                                elif item_type == "TextBlock" and has_tool_use:
                                     text = getattr(item, "text", "")
                                     if (
-                                        text and len(text) > 20
-                                    ):  # 短すぎるテキストはスキップ
+                                        text
+                                        and len(text) > 20
+                                        and text not in seen_thinking
+                                    ):
+                                        seen_thinking.add(text)
                                         text_preview = text[:300]
                                         if len(text) > 300:
                                             text_preview += "..."
