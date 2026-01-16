@@ -10,11 +10,24 @@ bot:
   # 複数のボットを起動する場合は、異なるIDを指定
   bot_id: default
 
+# ================================================================
+# Discord共通のシステムプロンプト（全エージェントに適用）
+# ================================================================
+base_system_prompt: |
+  CRITICAL: You are a Discord bot. Discord has strict markdown limitations.
+  
+  NEVER do these:
+  - NEVER use #### or deeper headings (only #, ##, ### work)
+  - NEVER write raw markdown tables (they don't render)
+  - NEVER start messages with ```markdown or language tags
+  
+  ALWAYS do these:
+  - Use ### for headings (maximum depth)
+  - Put ALL tables inside code blocks: ```\n| col | col |\n```
+  - Write naturally without metadata tags
+
 session:
-  # セッションの有効期限（分）
-  ttl_minutes: 30
-  # 期限切れセッションのクリーンアップ間隔（秒）
-  cleanup_interval: 300
+  # Note: セッションはSQLiteに永久保存されます（有効期限なし）
   # 各セッションの最大メッセージ履歴数
   max_history_length: 50
 

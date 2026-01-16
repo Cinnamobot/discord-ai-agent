@@ -55,18 +55,41 @@ def load_agent_config(agent_path: Union[str, Path]) -> AgentConfig:
     # Get allowed commands
     allowed_commands = agent_yaml.get("allowed_commands")
 
-    # Load system prompt
+    # Load base system prompt from config.yaml (if exists)
+    config_path = Path(__file__).parent.parent / "config.yaml"
+    base_system_prompt = ""
+    if config_path.exists():
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                config_data = yaml.safe_load(f)
+                base_system_prompt = config_data.get("base_system_prompt", "")
+        except Exception:
+            # If config.yaml can't be loaded or parsed, continue without base prompt
+            pass
+
+    # Load agent-specific system prompt
     # Priority: 1. system_prompt.txt file, 2. agent.yaml system_prompt field
     prompt_file = agent_path / "system_prompt.txt"
     if prompt_file.exists():
         with open(prompt_file, "r", encoding="utf-8") as f:
-            system_prompt = f.read()
+            agent_system_prompt = f.read()
     elif "system_prompt" in agent_yaml:
-        system_prompt = agent_yaml["system_prompt"]
+        agent_system_prompt = agent_yaml["system_prompt"]
     else:
         raise ValueError(
             f"Neither system_prompt.txt nor system_prompt field found in {agent_path}"
         )
+
+    # Combine base system prompt with agent-specific prompt
+    # Format: base_prompt + separator + agent_prompt
+    if base_system_prompt.strip():
+        system_prompt = (
+            f"{base_system_prompt.strip()}\n\n"
+            f"{'=' * 60}\n\n"
+            f"{agent_system_prompt.strip()}"
+        )
+    else:
+        system_prompt = agent_system_prompt
 
     # Determine workspace directory
     # Priority:

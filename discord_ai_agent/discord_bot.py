@@ -122,9 +122,10 @@ class DiscordAIBot(commands.Bot):
         logger.info("メッセージキューシステム初期化完了")
 
         # 旧セッション管理（後方互換性のため残す）
+        # Note: TTLを無効化（セッションは永久保持）
         self.session_manager = DiscordSessionManager(
-            ttl_minutes=30,
-            cleanup_interval=300,
+            ttl_minutes=999999,  # 実質無期限（約1900年）
+            cleanup_interval=86400,  # クリーンアップは1日1回のみ
         )
 
         # レート制限
