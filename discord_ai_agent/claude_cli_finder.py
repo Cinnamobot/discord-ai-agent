@@ -1,15 +1,14 @@
 """Claude CLI パス自動検知ユーティリティ"""
 
+import logging
 import os
 import shutil
 import sys
 from pathlib import Path
 from typing import Optional
 
-import loguru
 
-
-logger = loguru.logger
+logger = logging.getLogger(__name__)
 
 
 def find_claude_cli() -> Optional[Path]:
