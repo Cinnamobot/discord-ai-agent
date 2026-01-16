@@ -24,9 +24,10 @@ sys.path.insert(0, str(project_root))
 from discord_ai_agent.discord_bot import main
 
 if __name__ == "__main__":
-    # デフォルトエージェントを使用
+    # デフォルトエージェントディレクトリを使用
     if len(sys.argv) == 1:
-        sys.argv.append("./agents/default")
-        print("デフォルトエージェント (./agents/default) を使用します")
+        sys.argv.append("./agents")
+        print("エージェントディレクトリ (./agents) を使用します")
+        print("起動後は /create-thread コマンドでエージェントを選択できます\n")
 
     main()

@@ -30,12 +30,12 @@ def setup_environment():
         sys.stderr.reconfigure(encoding="utf-8")
 
 
-def run_single_bot(agent_path: str, token: Optional[str] = None):
+def run_single_bot(agents_dir: str = "./agents", token: Optional[str] = None):
     """
-    Run a single Discord AI agent bot
+    Run a single Discord AI agent bot with multi-agent support
 
     Args:
-        agent_path: Path to agent directory
+        agents_dir: Path to agents directory containing all agents (default: ./agents)
         token: Discord bot token (optional, can use .env)
     """
     from discord_ai_agent.discord_bot import main as bot_main
@@ -47,11 +47,11 @@ def run_single_bot(agent_path: str, token: Optional[str] = None):
     if token:
         os.environ["DISCORD_BOT_TOKEN"] = token
 
-    # Set agent path
-    sys.argv = ["discord-ai-agent", agent_path]
+    # Set agents directory
+    sys.argv = ["discord-ai-agent", agents_dir]
 
     print(f"🚀 Starting Discord AI Agent Bot")
-    print(f"📁 Agent: {agent_path}")
+    print(f"📁 Agents Directory: {agents_dir}")
     print(f"{'=' * 60}\n")
 
     bot_main()
@@ -83,12 +83,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run single bot with agent directory
-  discord-ai-agent --agent ./agents/market-analyst
-  discord-ai-agent ./agents/general-assistant
+  # Run single bot with all agents in directory
+  discord-ai-agent
+  discord-ai-agent ./agents
+  discord-ai-agent --agents ./my-agents
   
   # Run single bot with token
-  discord-ai-agent --agent ./agents/my-agent --token YOUR_TOKEN
+  discord-ai-agent --agents ./agents --token YOUR_TOKEN
   
   # Run multiple bots from config file
   discord-ai-agent --config bots.yaml
@@ -101,11 +102,11 @@ For more information, visit: https://github.com/yourusername/discord-ai-agent
     )
 
     parser.add_argument(
-        "agent", nargs="?", help="Path to agent directory (default: ./agents/default)"
+        "agents_dir", nargs="?", help="Path to agents directory (default: ./agents)"
     )
 
     parser.add_argument(
-        "-a", "--agent", dest="agent_path", help="Path to agent directory"
+        "-a", "--agents", dest="agents_dir_arg", help="Path to agents directory"
     )
 
     parser.add_argument(
@@ -140,9 +141,9 @@ For more information, visit: https://github.com/yourusername/discord-ai-agent
         # Multi-bot mode
         run_multiple_bots(args.config_file)
     else:
-        # Single bot mode
-        agent_path = args.agent_path or args.agent or "./agents/default"
-        run_single_bot(agent_path, args.token)
+        # Single bot mode with multi-agent support
+        agents_dir = args.agents_dir_arg or args.agents_dir or "./agents"
+        run_single_bot(agents_dir, args.token)
 
 
 def get_version() -> str:

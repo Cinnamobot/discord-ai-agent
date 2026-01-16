@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy import create_engine, desc
 from sqlalchemy.orm import sessionmaker, Session
 
-from .models import Base, ThreadSession, ConversationHistory, ToolLog
+from .models import Base, ThreadSession, ConversationHistory, ToolLog, ChannelSettings
 
 logger = logging.getLogger(__name__)
 
@@ -347,6 +347,119 @@ class SessionStore:
         finally:
             db.close()
 
+    # ========== Channel Settings ==========
+
+    def get_channel_settings(self, channel_id: int) -> Optional[ChannelSettings]:
+        """
+        Get channel settings by channel ID
+
+        Args:
+            channel_id: Discord channel ID
+
+        Returns:
+            ChannelSettings if exists, None otherwise
+        """
+        db = self._get_session()
+        try:
+            return (
+                db.query(ChannelSettings)
+                .filter(ChannelSettings.channel_id == channel_id)
+                .first()
+            )
+        finally:
+            db.close()
+
+    def set_channel_default_agent(
+        self, channel_id: int, guild_id: int, agent_name: Optional[str]
+    ) -> ChannelSettings:
+        """
+        Set or update default agent for a channel
+
+        Args:
+            channel_id: Discord channel ID
+            guild_id: Discord guild ID
+            agent_name: Agent name (None to clear)
+
+        Returns:
+            Updated or created ChannelSettings
+        """
+        db = self._get_session()
+        try:
+            settings = (
+                db.query(ChannelSettings)
+                .filter(ChannelSettings.channel_id == channel_id)
+                .first()
+            )
+
+            if settings:
+                # Update existing settings
+                settings.default_agent = agent_name
+                settings.updated_at = datetime.utcnow()
+            else:
+                # Create new settings
+                settings = ChannelSettings(
+                    channel_id=channel_id,
+                    guild_id=guild_id,
+                    default_agent=agent_name,
+                )
+                db.add(settings)
+
+            db.commit()
+            db.refresh(settings)
+            logger.info(
+                f"Set default agent for channel {channel_id}: {agent_name or '(cleared)'}"
+            )
+            return settings
+        finally:
+            db.close()
+
+    def delete_channel_settings(self, channel_id: int) -> bool:
+        """
+        Delete channel settings
+
+        Args:
+            channel_id: Discord channel ID
+
+        Returns:
+            True if deleted, False if not found
+        """
+        db = self._get_session()
+        try:
+            settings = (
+                db.query(ChannelSettings)
+                .filter(ChannelSettings.channel_id == channel_id)
+                .first()
+            )
+
+            if settings:
+                db.delete(settings)
+                db.commit()
+                logger.info(f"Deleted settings for channel {channel_id}")
+                return True
+            return False
+        finally:
+            db.close()
+
+    def list_guild_settings(self, guild_id: int) -> List[ChannelSettings]:
+        """
+        List all channel settings for a guild
+
+        Args:
+            guild_id: Discord guild ID
+
+        Returns:
+            List of ChannelSettings for the guild
+        """
+        db = self._get_session()
+        try:
+            return (
+                db.query(ChannelSettings)
+                .filter(ChannelSettings.guild_id == guild_id)
+                .all()
+            )
+        finally:
+            db.close()
+
     # ========== Statistics ==========
 
     def get_stats(self) -> Dict[str, Any]:
@@ -364,12 +477,14 @@ class SessionStore:
             )
             total_messages = db.query(ConversationHistory).count()
             total_tools = db.query(ToolLog).count()
+            total_channel_settings = db.query(ChannelSettings).count()
 
             return {
                 "total_sessions": total_sessions,
                 "active_sessions": active_sessions,
                 "total_messages": total_messages,
                 "total_tool_uses": total_tools,
+                "channel_settings": total_channel_settings,
             }
         finally:
             db.close()

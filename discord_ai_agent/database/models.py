@@ -1,7 +1,16 @@
 """SQLAlchemy models for session and conversation storage"""
 
 from datetime import datetime
-from sqlalchemy import Boolean, Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Integer,
+    BigInteger,
+    String,
+    Text,
+    DateTime,
+    ForeignKey,
+)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -81,3 +90,20 @@ class ToolLog(Base):
 
     def __repr__(self):
         return f"<ToolLog(id={self.id}, thread_id={self.thread_id}, tool={self.tool_name})>"
+
+
+class ChannelSettings(Base):
+    """Per-channel configuration settings"""
+
+    __tablename__ = "channel_settings"
+
+    channel_id = Column(BigInteger, primary_key=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    default_agent = Column(String(255), nullable=True)  # Default agent for this channel
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    def __repr__(self):
+        return f"<ChannelSettings(channel_id={self.channel_id}, default_agent={self.default_agent})>"

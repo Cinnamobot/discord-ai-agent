@@ -49,6 +49,7 @@ from discord_ai_agent import file_manager
 
 # エージェント設定ローダー
 from discord_ai_agent.agent_loader import load_agent_config, AgentConfig
+from discord_ai_agent.agent_registry import AgentRegistry
 
 # ロギング設定（カラー出力対応）
 logging.basicConfig(
@@ -77,12 +78,14 @@ class Colors:
 class DiscordAIBot(commands.Bot):
     """Discord AI Agent Bot - Agent SDK Integration"""
 
-    def __init__(self, agent_config_or_path, intents: Optional[discord.Intents] = None):
+    def __init__(
+        self, agents_dir: str = "./agents", intents: Optional[discord.Intents] = None
+    ):
         """
         Initialize Discord AI Bot
 
         Args:
-            agent_config_or_path: AgentConfig object or path to agent directory
+            agents_dir: Path to directory containing all agents (default: ./agents)
             intents: Discord intents (optional, uses defaults if not provided)
         """
         # Setup intents
@@ -99,21 +102,19 @@ class DiscordAIBot(commands.Bot):
             help_command=None,
         )
 
-        # Load agent config
-        if isinstance(agent_config_or_path, AgentConfig):
-            self.agent_config = agent_config_or_path
-            self.agent_path = agent_config_or_path.agent_root
-        else:
-            self.agent_path = Path(agent_config_or_path)
-            try:
-                self.agent_config: AgentConfig = load_agent_config(self.agent_path)
-                logger.info(f"エージェント設定読み込み成功: {self.agent_config.name}")
-            except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
-                logger.error(f"エージェント設定の読み込みに失敗: {e}")
-                raise
+        # Initialize agent registry (discovers all agents)
+        try:
+            self.agent_registry = AgentRegistry(agents_dir=agents_dir)
+            logger.info(
+                f"Agent registry initialized with {len(self.agent_registry.list_agents())} agents"
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize agent registry: {e}")
+            raise
 
         # セッション管理（SQLiteベース）
-        db_path = self.agent_path / "sessions.db"
+        # Use a shared database for all agents
+        db_path = Path(agents_dir) / "shared_sessions.db"
         self.session_store = SessionStore(str(db_path))
         logger.info(f"セッションDB: {db_path}")
 
@@ -151,10 +152,21 @@ class DiscordAIBot(commands.Bot):
     async def on_ready(self):
         """Bot起動時の処理"""
         logger.info(f"ログイン成功: {self.user} (ID: {self.user.id})")
-        logger.info(f"エージェント名: {self.agent_config.name}")
-        logger.info(f"エージェントルート: {self.agent_config.agent_root}")
-        logger.info(f"ワークスペース: {self.agent_config.workspace}")
-        logger.info(f"システムプロンプト: {len(self.agent_config.system_prompt)} 文字")
+
+        # List all available agents
+        agents = self.agent_registry.list_agents()
+        logger.info(f"利用可能なエージェント: {', '.join([a.name for a in agents])}")
+
+        # Setup slash commands
+        try:
+            from .commands import setup_commands
+
+            await setup_commands(self)
+            await self.tree.sync()
+            logger.info(f"Slash commands synced")
+        except Exception as e:
+            logger.error(f"Failed to setup commands: {e}", exc_info=True)
+
         logger.info("Bot準備完了")
 
     async def on_message_delete(self, message: discord.Message):
@@ -685,17 +697,37 @@ class DiscordAIBot(commands.Bot):
 
     # ========== スレッドベースの会話管理 ==========
 
-    async def create_thread_and_start(self, message: discord.Message):
+    async def create_thread_and_start(
+        self, message: discord.Message, agent_name: Optional[str] = None
+    ):
         """
         新規スレッドを作成して会話を開始
 
         Args:
             message: ユーザーのメンション付きメッセージ
+            agent_name: 使用するエージェント名 (Noneの場合はチャンネルのデフォルトを使用)
         """
         # レート制限チェック
         allowed, error_msg = await self.rate_limiter.check_rate_limit(message.author.id)
         if not allowed:
             await message.reply(f"⚠️ {error_msg}")
+            return
+
+        # エージェント名が指定されていない場合、チャンネルのデフォルトを取得
+        if agent_name is None:
+            settings = self.session_store.get_channel_settings(message.channel.id)
+            if settings and settings.default_agent:
+                agent_name = settings.default_agent
+                logger.info(f"Using channel default agent: {agent_name}")
+            else:
+                agent_name = self.agent_registry.get_default_agent_name()
+                logger.info(f"Using global default agent: {agent_name}")
+
+        # エージェント設定を取得
+        try:
+            agent_config = self.agent_registry.get_agent(agent_name)
+        except ValueError as e:
+            await message.reply(f"⚠️ エージェント '{agent_name}' が見つかりません: {e}")
             return
 
         # メンション部分を除去
@@ -722,18 +754,16 @@ class DiscordAIBot(commands.Bot):
         self.session_store.create_thread_session(
             thread_id=thread.id,
             user_id=message.author.id,
-            agent_name=self.agent_config.name,
+            agent_name=agent_name,
         )
-        logger.info(f"セッション作成完了: thread_id={thread.id}")
+        logger.info(f"セッション作成完了: thread_id={thread.id}, agent={agent_name}")
 
         # 挨拶メッセージ
         greeting = f"👋 {message.author.mention} こんにちは！\n"
         if content:
             greeting += f"\n> {content[:100]}{'...' if len(content) > 100 else ''}\n\nについて対応します。"
         else:
-            greeting += (
-                f"私は **{self.agent_config.name}** です。何をお手伝いしましょうか？"
-            )
+            greeting += f"私は **{agent_config.name}** です。何をお手伝いしましょうか？"
 
         await thread.send(greeting)
 
@@ -744,7 +774,7 @@ class DiscordAIBot(commands.Bot):
                 try:
                     await file_manager.download_attachments(
                         message.attachments,
-                        self.agent_config.workspace,
+                        agent_config.workspace,
                         max_file_size=1024 * 1024,  # 1MB
                     )
                     content += f"\n\n（{len(message.attachments)}個のファイルをworkspace/に保存しました）"
@@ -844,13 +874,23 @@ class DiscordAIBot(commands.Bot):
             )
             return
 
+        # スレッドのエージェント設定を取得
+        try:
+            agent_config = self.agent_registry.get_agent(session.agent_name)
+        except ValueError as e:
+            logger.error(f"Failed to load agent '{session.agent_name}': {e}")
+            await thread.send(
+                f"⚠️ エージェント '{session.agent_name}' の読み込みに失敗しました"
+            )
+            return
+
         # 添付ファイルの処理
         content = message.content
         if message.attachments:
             try:
                 await file_manager.download_attachments(
                     message.attachments,
-                    self.agent_config.workspace,
+                    agent_config.workspace,
                     max_file_size=1024 * 1024,  # 1MB
                 )
                 content += f"\n\n（{len(message.attachments)}個のファイルをworkspace/に保存しました）"
@@ -880,7 +920,22 @@ class DiscordAIBot(commands.Bot):
 
         # 既存のセッションを取得
         session = self.session_store.get_thread_session(thread.id)
-        sdk_session_id = session.sdk_session_id if session else None
+        if not session:
+            logger.error(f"Session not found for thread {thread.id}")
+            await thread.send("⚠️ セッション情報が見つかりません")
+            return
+
+        sdk_session_id = session.sdk_session_id
+
+        # スレッドのエージェント設定を取得
+        try:
+            agent_config = self.agent_registry.get_agent(session.agent_name)
+        except ValueError as e:
+            logger.error(f"Failed to load agent '{session.agent_name}': {e}")
+            await thread.send(
+                f"⚠️ エージェント '{session.agent_name}' の読み込みに失敗しました"
+            )
+            return
 
         # ステータスメッセージ
         if sdk_session_id:
@@ -896,6 +951,7 @@ class DiscordAIBot(commands.Bot):
             f"{Colors.BOLD}{Colors.CYAN}🤖 Agent SDK 実行開始{Colors.ENDC}", flush=True
         )
         print(f"{Colors.BLUE}📝 Thread:{Colors.ENDC} {thread.id}", flush=True)
+        print(f"{Colors.BLUE}📝 Agent:{Colors.ENDC} {agent_config.name}", flush=True)
         print(
             f"{Colors.BLUE}📝 User Message:{Colors.ENDC} {user_prompt[:100]}...",
             flush=True,
@@ -923,8 +979,8 @@ class DiscordAIBot(commands.Bot):
                         permission_mode="bypassPermissions",  # 全ツールを自動承認
                         max_turns=20,
                         env=self.env_vars,
-                        cwd=str(self.agent_config.workspace),
-                        system_prompt=self.agent_config.system_prompt,
+                        cwd=str(agent_config.workspace),
+                        system_prompt=agent_config.system_prompt,
                         resume=sdk_session_id,  # セッションを継続
                     ),
                 ):
@@ -1193,18 +1249,19 @@ def main():
     # .env ファイルを読み込み
     load_dotenv()
 
-    # コマンドライン引数からエージェントパスを取得
+    # コマンドライン引数からエージェントディレクトリを取得
     import sys
 
-    if len(sys.argv) < 2:
-        print("使用方法: python run.py <agent_directory>")
-        print("例: python run.py ./agents/default")
-        sys.exit(1)
+    agents_dir = "./agents"
+    if len(sys.argv) >= 2:
+        agents_dir = sys.argv[1]
 
-    agent_path = Path(sys.argv[1])
+    agents_path = Path(agents_dir)
 
-    if not agent_path.exists():
-        print(f"エラー: エージェントディレクトリが見つかりません: {agent_path}")
+    if not agents_path.exists():
+        print(f"エラー: エージェントディレクトリが見つかりません: {agents_path}")
+        print(f"使用方法: python run.py [agents_directory]")
+        print(f"例: python run.py ./agents")
         sys.exit(1)
 
     # Discord Bot Token 確認
@@ -1214,11 +1271,11 @@ def main():
         print(".env ファイルで設定してください")
         sys.exit(1)
 
-    # Bot 起動
-    bot = DiscordAIBot(agent_path)
+    # Bot 起動 (multi-agent support)
+    bot = DiscordAIBot(agents_dir=str(agents_path))
 
     try:
-        logger.info(f"Bot起動中: {agent_path}")
+        logger.info(f"Bot起動中 (agents directory: {agents_path})")
         bot.run(bot_token)
     except KeyboardInterrupt:
         logger.info("Bot停止（KeyboardInterrupt）")
