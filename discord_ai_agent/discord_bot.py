@@ -467,6 +467,7 @@ class DiscordAIBot(commands.Bot):
                         "Glob",
                         "Grep",
                         "WebSearch",
+                        "mcp__tavily-mcp__tavily_search",  # Tavily Web検索
                     ],
                     cwd=str(self.agent_config.workspace),
                     cli_path=str(self.claude_cli_path),
@@ -474,6 +475,7 @@ class DiscordAIBot(commands.Bot):
                     max_turns=15,
                     env=self.env_vars,
                     resume=sdk_session_id,  # Session continuity support
+                    setting_sources=["project"],  # .mcp.json を読み込む
                 ),
             ):
                 # ストリーミングメッセージを表示
@@ -982,6 +984,17 @@ class DiscordAIBot(commands.Bot):
                         cwd=str(agent_config.workspace),
                         system_prompt=agent_config.system_prompt,
                         resume=sdk_session_id,  # セッションを継続
+                        allowed_tools=[
+                            "Read",
+                            "Write",
+                            "Edit",
+                            "Bash",
+                            "Glob",
+                            "Grep",
+                            "WebSearch",
+                            "mcp__tavily-mcp__tavily_search",  # Tavily Web検索
+                        ],
+                        setting_sources=["project"],  # .mcp.json を読み込む
                     ),
                 ):
                     # ターミナルにログ表示

@@ -50,7 +50,31 @@ DISCORD_BOT_TOKEN=your_discord_bot_token
 
 **Note**: Claude Code CLIを使用するため、Anthropic APIキーは不要です。
 
-### 3. 起動
+### 3. MCP Server設定（オプション: Web検索機能）
+
+Tavily Web検索機能を使用する場合:
+
+#### 3-1. Tavily APIキーの取得
+
+1. [Tavily](https://tavily.com) でアカウント作成
+2. APIキー（`tvly-...`形式）を取得
+
+#### 3-2. MCP設定ファイルの作成
+
+```bash
+# .mcp.json.example をコピー
+cp .mcp.json.example .mcp.json
+```
+
+#### 3-3. .env に API キーを追加
+
+```env
+TAVILY_API_KEY=tvly-your-actual-api-key
+```
+
+**Note**: `.mcp.json`はGitに含まれません（`.gitignore`で除外）。
+
+### 4. 起動
 
 ```bash
 # リアルタイム表示を有効化
@@ -61,7 +85,7 @@ export PYTHONUNBUFFERED=1    # Linux/Mac
 uv run python run.py
 ```
 
-### 4. Discordで使用
+### 5. Discordで使用
 
 #### スラッシュコマンド
 

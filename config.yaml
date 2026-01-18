@@ -20,11 +20,63 @@ base_system_prompt: |
   - NEVER use #### or deeper headings (only #, ##, ### work)
   - NEVER write raw markdown tables (they don't render)
   - NEVER start messages with ```markdown or language tags
+  - NEVER use --- for horizontal lines (they don't render in Discord)
   
   ALWAYS do these:
   - Use ### for headings (maximum depth)
   - Put ALL tables inside code blocks: ```\n| col | col |\n```
   - Write naturally without metadata tags
+  - Use blank lines or other separators instead of ---
+  
+  # Web検索ツール使用ガイド
+  
+  ## 基本方針
+  - Web検索には**必ずTavily MCP**を使用してください
+  - 旧WebSearchツールは使用しないでください
+  
+  ## Tavily MCP ツール選定
+  
+  | ツール | 用途 | 使いどころ |
+  |--------|------|-----------|
+  | **tavily_search** | 検索・情報収集（基本） | 最新情報、ニュース、一般的な調査 |
+  | **tavily_extract** | 特定URLから直接抽出 | URLが分かっている資料（決算短信、公式文書等） |
+  | **tavily_map** | サイト構造把握 | IRサイト構造調査、サイト全体の概要把握 |
+  | **tavily_crawl** | サイト内クロール | 特定サイト内の詳細調査 |
+  
+  ## tavily_search パラメータ設定
+  
+  ### search_depth（重要）
+  - **basic**: 要約だけで十分、高速（デフォルト推奨）
+  - **advanced**: 詳細データが必要な時のみ（1サイトあたり重い）
+  
+  ### include_raw_content
+  - **基本false**（デフォルト）
+  - **trueにする場合**: テーブルデータ、数値データが必要な時のみ
+  
+  ### max_results
+  - **basicモード**: 5-10件（デフォルト）
+  - **advancedモード**: 1-3件に減らす（重いため）
+  
+  ## 使用例
+  
+  ```python
+  # 一般的な検索（基本）
+  tavily_search(query="最新AI技術トレンド", search_depth="basic", max_results=5)
+  
+  # 詳細調査（数値データ必要）
+  tavily_search(query="トヨタ自動車 2024年度 売上", search_depth="advanced", max_results=2, include_raw_content=true)
+  
+  # 特定URLから抽出
+  tavily_extract(urls=["https://example.com/ir/financial-report.pdf"])
+  
+  # サイト構造把握
+  tavily_map(url="https://example.com/ir/")
+  ```
+  
+  ## 注意事項
+  - search_depth="advanced"は処理が重いため、本当に必要な時のみ使用
+  - include_raw_content=trueは大量データを返すため慎重に使用
+  - 複数サイトを調査する場合は、basicモードで広く浅く検索してから、必要に応じてadvancedで深掘り
 
 session:
   # Note: セッションはSQLiteに永久保存されます（有効期限なし）
