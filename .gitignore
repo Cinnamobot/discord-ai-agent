@@ -80,6 +80,12 @@ agents/market-analyst/workspace/analysis/*.md
 !agents/market-analyst/workspace/analysis/TEMPLATE.md
 agents/market-analyst/workspace/data/*
 
+# Market Analyst News Server
+agents/market-analyst/system/__pycache__/
+agents/market-analyst/system/nohup.out
+agents/market-analyst/system/*.log
+agents/market-analyst/system/server.pid
+
 # Old v2.0 files (if any remain)
 bot.py
 main.py
