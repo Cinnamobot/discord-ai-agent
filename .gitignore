@@ -87,9 +87,9 @@ agents/market-analyst/system/*.log
 agents/market-analyst/system/server.pid
 
 # Old v2.0 files (if any remain)
-bot.py
-main.py
-src/agent_factory.py
-src/config.py
-src/security.py
-src/tool_hooks.py
+/bot.py
+/main.py
+/src/agent_factory.py
+/src/config.py
+/src/security.py
+/src/tool_hooks.py
